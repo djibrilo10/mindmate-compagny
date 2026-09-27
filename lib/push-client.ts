@@ -38,7 +38,7 @@ export async function subscribeToPush(): Promise<PushSubscribeResult> {
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
+      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
     });
   }
 
@@ -78,3 +78,4 @@ export async function getPushSubscriptionStatus(): Promise<boolean> {
     return false;
   }
 }
+
