@@ -13,7 +13,7 @@ export const registerSchema = z.object({
     .string()
     .min(1, "Entrez votre nom")
     .max(50, "Ce nom est trop long"),
-  email: z.string().email("Entrez une adresse courriel valide"),
+  email: z.string().trim().email("Entrez une adresse courriel valide"),
   password: z
     .string()
     .min(8, "Le mot de passe doit contenir au moins 8 caractères")
@@ -23,7 +23,12 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   organizationSlug: z.string().min(1, "Entrez l'identifiant de votre entreprise"),
-  email: z.string().email("Entrez une adresse courriel valide"),
+  // .trim() avant .email() : les claviers mobiles (surtout avec l'auto-complétion
+  // du domaine, ex. "@gmail.com" suggéré) ajoutent parfois un espace en fin de
+  // saisie, invisible à l'œil, qui faisait échouer la validation même pour une
+  // adresse par ailleurs correcte (ex. un alias "+admin@..." plus long, donc
+  // plus susceptible de déclencher l'auto-complétion) — voir AUDIT.md.
+  email: z.string().trim().email("Entrez une adresse courriel valide"),
   password: z.string().min(1, "Entrez votre mot de passe"),
 });
 
@@ -42,7 +47,7 @@ export const joinSchema = z.object({
     .string()
     .min(1, "Entrez votre nom")
     .max(50, "Ce nom est trop long"),
-  email: z.string().email("Entrez une adresse courriel valide"),
+  email: z.string().trim().email("Entrez une adresse courriel valide"),
   password: z
     .string()
     .min(8, "Le mot de passe doit contenir au moins 8 caractères")
