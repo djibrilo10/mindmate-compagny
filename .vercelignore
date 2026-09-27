@@ -1,0 +1,8 @@
+# Sans dépôt Git, la CLI Vercel ne peut pas se baser sur .gitignore pour
+# savoir quoi exclure de l'upload — elle a donc inclus .env par défaut lors
+# des premiers déploiements (secrets bruts copiés dans le build, visibles
+# dans les journaux de construction : "Environment variables loaded from
+# .env"). Ce fichier corrige ça explicitement. Voir AUDIT.md, journal du
+# 27 sept. 2026.
+.env
+.env.*

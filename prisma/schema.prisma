@@ -1,0 +1,406 @@
+// ============================================================
+// SCHÉMA PRISMA — Portail Employé Multi-Entreprise
+// ============================================================
+// Règle d'or : presque CHAQUE table contient organizationId.
+// Aucune requête ne doit jamais lire/écrire sans filtrer par
+// organizationId. C'est ce qui garantit l'isolation entre
+// l'Entreprise A et l'Entreprise B.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// RÔLES — définit ce que chaque utilisateur a le droit de faire
+// ------------------------------------------------------------
+enum Role {
+  SUPER_ADMIN   // vous — gère toutes les organisations clientes
+  ORG_ADMIN     // admin/RH de l'entreprise cliente
+  MANAGER       // chef de département / gérant
+  EMPLOYEE      // employé standard
+}
+
+// Statut de l'organisation côté PLATEFORME (pas côté RH — voir UserStatus
+// pour désactiver un employé). Sert au propriétaire de l'application
+// (SUPER_ADMIN, voir AUDIT.md 7.20) à couper l'accès d'une entreprise
+// cliente, typiquement en cas de non-paiement. Une organisation SUSPENDED
+// ne peut plus se connecter (lib/auth.ts) ni utiliser l'app (lib/session-guard.ts).
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ReportStatus {
+  NEW
+  SEEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum AbsenceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum JobPostingStatus {
+  OPEN
+  CLOSED
+}
+
+enum ApplicationStatus {
+  RECEIVED
+  IN_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED   // "supprimé" par l'admin -> on désactive, on ne supprime jamais vraiment (traçabilité)
+}
+
+// ------------------------------------------------------------
+// ORGANIZATION — une entreprise cliente = un tenant
+// ------------------------------------------------------------
+model Organization {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique // utilisé dans l'URL, ex: acme.monapp.com ou /org/acme
+  plan       String   @default("free") // free / pro / enterprise (pour la facturation future)
+  inviteCode String?  @unique // code d'auto-inscription employé, ex "XK7P-2QRT" (voir lib/invite-code.ts, AUDIT.md 7.18) ; nullable pour les organisations créées avant cette fonctionnalité, généré au premier affichage de /dashboard/settings
+  logoData       Bytes?    // logo propre à CETTE organisation, affiché à ses employés une fois connectés (voir AUDIT.md 7.19) ; null = utilise le logo par défaut de la plateforme (public/logo-mark-white.png)
+  logoMimeType   String?   // type MIME du logo, ex "image/png" — null tant qu'aucun logo n'a été téléversé
+  logoUpdatedAt  DateTime? // sert à invalider le cache navigateur de l'image après un changement (voir GET /api/organization/logo)
+  status         OrganizationStatus @default(ACTIVE) // géré depuis /platform par le SUPER_ADMIN (voir AUDIT.md 7.20)
+  suspendedAt    DateTime? // date de la dernière suspension, affichée dans /platform/organizations
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  departments      Department[]
+  users            User[]
+  announcements    Announcement[]
+  jobPostings      JobPosting[]
+  fileUploads      FileUpload[]
+  auditLogs        AuditLog[]
+  invitations      Invitation[]
+  notifications    Notification[]
+
+  @@map("organizations")
+}
+
+// ------------------------------------------------------------
+// DEPARTMENT
+// ------------------------------------------------------------
+model Department {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime @default(now())
+
+  users User[]
+
+  @@unique([organizationId, name]) // pas deux départements du même nom dans la même entreprise
+  @@index([organizationId])
+  @@map("departments")
+}
+
+// ------------------------------------------------------------
+// USER — un employé, gérant, ou admin, toujours lié à 1 organisation
+// ------------------------------------------------------------
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  email          String
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           Role         @default(EMPLOYEE)
+  status         UserStatus   @default(ACTIVE)
+  avatarUrl      String?
+  hireDate       DateTime?    @default(now()) // utile pour "nouvelles recrues"
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Relations où l'utilisateur est l'AUTEUR
+  reportsSubmitted     Report[]          @relation("ReportSubmitter")
+  absenceRequests      AbsenceRequest[]
+  jobApplications      JobApplication[]
+  reviewsWritten       Review[]
+  messagesSent         Message[]         @relation("MessageSender")
+  messagesReceived     Message[]         @relation("MessageReceiver")
+  announcementsPosted  Announcement[]    @relation("AnnouncementAuthor")
+  filesUploaded        FileUpload[]      @relation("FileUploader")
+  notifications        Notification[]
+
+  // Un email doit être unique PAR organisation (pas globalement,
+  // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([organizationId, departmentId])
+  @@map("users")
+}
+
+// ------------------------------------------------------------
+// INVITATION — pour inviter un employé avant qu'il ait un compte
+// ------------------------------------------------------------
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           Role         @default(EMPLOYEE)
+  token          String       @unique // lien sécurisé envoyé par email
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("invitations")
+}
+
+// ------------------------------------------------------------
+// REPORT — signalement d'un problème (employé -> gérant/admin)
+// ------------------------------------------------------------
+model Report {
+  id             String       @id @default(cuid())
+  organizationId String
+  submitterId    String
+  submitter      User         @relation("ReportSubmitter", fields: [submitterId], references: [id], onDelete: Cascade)
+
+  title          String
+  description    String
+  isAnonymous    Boolean      @default(false) // idée additionnelle : anonymat optionnel
+  status         ReportStatus @default(NEW)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("reports")
+}
+
+// ------------------------------------------------------------
+// ABSENCE REQUEST — déclaration d'absence
+// ------------------------------------------------------------
+model AbsenceRequest {
+  id             String        @id @default(cuid())
+  organizationId String
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  status         AbsenceStatus @default(PENDING)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("absence_requests")
+}
+
+// ------------------------------------------------------------
+// FILE UPLOAD — listes de présence, horaires, documents partagés.
+// Stockés directement dans Postgres (colonne bytea), comme les pièces
+// jointes des annonces : pas de service de stockage externe à configurer.
+// ------------------------------------------------------------
+model FileUpload {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploaderId     String
+  uploader       User         @relation("FileUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  fileName       String
+  mimeType       String       // type MIME, ex: "application/pdf", "image/jpeg"
+  fileSize       Int          // en octets (affichage + contrôle de limite)
+  data           Bytes        // contenu binaire du fichier
+  category       String       @default("other") // "schedule" / "policy" / "other"
+  weekLabel      String?      // ex: "Semaine du 22 sept 2026", utile pour les horaires
+
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("file_uploads")
+}
+
+// ------------------------------------------------------------
+// ANNOUNCEMENT — annonce générale admin -> tous les employés
+// ------------------------------------------------------------
+model Announcement {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User         @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  title          String
+  content        String
+  createdAt      DateTime     @default(now())
+
+  attachments    AnnouncementAttachment[]
+
+  @@index([organizationId])
+  @@map("announcements")
+}
+
+// ------------------------------------------------------------
+// ANNOUNCEMENT ATTACHMENT — fichiers joints à une annonce (PDF, JPG, PNG…)
+// Stockés directement dans Postgres (colonne bytea) : pas de service de
+// stockage externe à configurer, adapté à des fichiers de quelques Mo
+// (listes de présence, etc.). Si le volume grossit beaucoup, ce modèle
+// pourra migrer vers S3/R2/Supabase Storage sans changer le reste du code
+// (seule la lecture/écriture de "data" changerait).
+// ------------------------------------------------------------
+model AnnouncementAttachment {
+  id             String       @id @default(cuid())
+  organizationId String
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  fileName       String
+  fileType       String       // type MIME, ex: "application/pdf", "image/jpeg"
+  fileSize       Int          // en octets (affichage + contrôle de limite)
+  data           Bytes        // contenu binaire du fichier
+
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([announcementId])
+  @@map("announcement_attachments")
+}
+
+// ------------------------------------------------------------
+// JOB POSTING — poste ouvert
+// ------------------------------------------------------------
+model JobPosting {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  title          String
+  description    String
+  status         JobPostingStatus @default(OPEN)
+  createdAt      DateTime         @default(now())
+
+  applications   JobApplication[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("job_postings")
+}
+
+// ------------------------------------------------------------
+// JOB APPLICATION — candidature interne
+// ------------------------------------------------------------
+model JobApplication {
+  id            String             @id @default(cuid())
+  jobPostingId  String
+  jobPosting    JobPosting         @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  applicantId   String
+  applicant     User               @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  status        ApplicationStatus  @default(RECEIVED)
+  message       String?
+  createdAt     DateTime           @default(now())
+
+  @@unique([jobPostingId, applicantId]) // un employé ne postule qu'une fois par poste
+  @@map("job_applications")
+}
+
+// ------------------------------------------------------------
+// REVIEW — avis laissé par un employé
+// ------------------------------------------------------------
+model Review {
+  id             String   @id @default(cuid())
+  organizationId String
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  rating         Int      // 1 à 5
+  comment        String
+  isAnonymous    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("reviews")
+}
+
+// ------------------------------------------------------------
+// MESSAGE — communication ciblée admin <-> employé
+// ------------------------------------------------------------
+model Message {
+  id             String   @id @default(cuid())
+  organizationId String
+  senderId       String
+  sender         User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId     String
+  receiver       User     @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  content        String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([receiverId, isRead])
+  @@map("messages")
+}
+
+// ------------------------------------------------------------
+// NOTIFICATION — alerte en app pour UN destinataire précis (Phase 4).
+// Volontairement séparée d'AuditLog : AuditLog trace TOUTES les actions de
+// l'organisation pour l'admin (traçabilité), alors qu'une Notification
+// cible un seul utilisateur et existe pour LUI (lu/non lu), pas pour l'audit.
+// ------------------------------------------------------------
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type           String       // même valeur que AuditLog.action (ex: "REPORT_CREATED") -> réutilise lib/activity-log.ts pour l'icône/le libellé
+  title          String
+  body           String?
+  link           String?      // ex: "/dashboard/reports"
+  isRead         Boolean      @default(false)
+
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ------------------------------------------------------------
+// AUDIT LOG — traçabilité (qui a fait quoi, essentiel pour la sécurité RH)
+// ------------------------------------------------------------
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?      // qui a fait l'action (nullable si acteur système)
+  action         String       // ex: "USER_DELETED", "FILE_UPLOADED", "ANNOUNCEMENT_CREATED"
+  targetId       String?      // id de l'objet concerné
+  metadata       Json?        // détails additionnels
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("audit_logs")
+}
