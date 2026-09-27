@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { actionCategory } from "@/lib/activity-log";
@@ -22,6 +22,24 @@ export function NotificationsList({ initialNotifications }: { initialNotificatio
   const router = useRouter();
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Filet de sécurité : synchronise le badge de l'icône de l'app avec le
+  // compte réel de non-lus dès que cette page est ouverte, même si une
+  // notification push a été manquée (permission pas encore accordée,
+  // appareil hors-ligne au moment de l'envoi, etc.). L'affichage "en direct"
+  // du badge quand l'app est fermée reste géré par public/sw.js (push).
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("setAppBadge" in navigator)) return;
+    const nav = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (unreadCount > 0) {
+      nav.setAppBadge?.(unreadCount).catch(() => {});
+    } else {
+      nav.clearAppBadge?.().catch(() => {});
+    }
+  }, [unreadCount]);
 
   function openNotification(notification: NotificationItem) {
     if (!notification.isRead) {

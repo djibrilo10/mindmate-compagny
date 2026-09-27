@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 import type { Role } from "@prisma/client";
 
 // ------------------------------------------------------------
@@ -23,6 +24,7 @@ export async function notifyUser(organizationId: string, userId: string, content
   await prisma.notification.create({
     data: { organizationId, userId, ...content },
   });
+  await pushOne(userId, content);
 }
 
 export async function notifyUsers(organizationId: string, userIds: string[], content: NotifyContent) {
@@ -30,6 +32,26 @@ export async function notifyUsers(organizationId: string, userIds: string[], con
   await prisma.notification.createMany({
     data: userIds.map((userId) => ({ organizationId, userId, ...content })),
   });
+  await Promise.all(userIds.map((userId) => pushOne(userId, content)));
+}
+
+// Envoie la vraie notification système (push) après coup, une fois la ligne
+// Notification déjà écrite en base -- le badge de l'icône de l'app reflète
+// le compte RÉEL de non-lus, pas juste "+1" (au cas où plusieurs
+// notifications arrivent d'un coup). Ne fait jamais échouer l'appelant :
+// le push est un bonus, la table Notification reste la source de vérité.
+async function pushOne(userId: string, content: NotifyContent) {
+  try {
+    const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
+    await sendPushToUser(userId, {
+      title: content.title,
+      body: content.body,
+      link: content.link,
+      badgeCount: unreadCount,
+    });
+  } catch (error) {
+    console.error("[notifications] push non envoyé", error);
+  }
 }
 
 // Notifie tous les utilisateurs ACTIFS de l'organisation ayant l'un des

@@ -144,6 +144,7 @@ model User {
   announcementsPosted  Announcement[]    @relation("AnnouncementAuthor")
   filesUploaded        FileUpload[]      @relation("FileUploader")
   notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -386,6 +387,31 @@ model Notification {
   @@index([organizationId])
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+// ------------------------------------------------------------
+// PUSH SUBSCRIPTION — abonnement notifications push (Web Push API) d'UN
+// appareil/navigateur pour UN utilisateur. Un même utilisateur peut avoir
+// plusieurs abonnements actifs (téléphone + ordinateur, par ex.). Utilisé
+// par lib/push.ts pour envoyer une vraie notification système (avec le
+// badge numérique sur l'icône de l'app) même quand l'app est fermée.
+// Voir AUDIT.md pour la mise en place complète (clés VAPID, service worker).
+// ------------------------------------------------------------
+model PushSubscription {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint       String   @unique // identifie l'appareil/navigateur de façon unique
+  p256dh         String            // clé publique de chiffrement fournie par le navigateur
+  auth           String            // secret d'authentification fourni par le navigateur
+
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ------------------------------------------------------------

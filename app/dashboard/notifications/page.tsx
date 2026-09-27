@@ -3,6 +3,7 @@ import { Bell } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { NotificationsList } from "@/components/dashboard/NotificationsList";
+import { PushNotificationsToggle } from "@/components/dashboard/PushNotificationsToggle";
 
 const MAX_NOTIFICATIONS = 50;
 
@@ -49,6 +50,7 @@ export default async function NotificationsPage() {
         </div>
       </div>
 
+      <PushNotificationsToggle />
       <NotificationsList initialNotifications={serialized} />
     </div>
   );

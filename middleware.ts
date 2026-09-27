@@ -85,6 +85,7 @@ export const config = {
     "/api/notifications/:path*",
     "/api/exports/:path*",
     "/api/organization/:path*",
+    "/api/push/:path*",
     "/platform/:path*",
     "/api/platform/:path*",
     "/suspended",

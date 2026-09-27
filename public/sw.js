@@ -40,3 +40,68 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
   }
 });
+
+// ------------------------------------------------------------
+// Notifications push (voir AUDIT.md) : reçoit le message envoyé par
+// lib/push.ts (via le service de push du navigateur), affiche une vraie
+// notification système, ET met à jour le badge numérique sur l'icône de
+// l'app (Badging API) -- fonctionne même si l'app est complètement fermée,
+// c'est tout l'intérêt par rapport au badge "en app" du Topbar/NotificationsList.
+// Le son joué à la réception est celui, par défaut, du système d'exploitation
+// pour une notification -- le Web n'offre pas de moyen fiable/multi-navigateur
+// d'imposer un fichier son personnalisé pour une notification système.
+// ------------------------------------------------------------
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+
+  const title = data.title || "Mindmate Compagny";
+  const options = {
+    body: data.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    data: { link: data.link || "/dashboard/notifications" },
+  };
+
+  event.waitUntil(
+    (async () => {
+      await self.registration.showNotification(title, options);
+
+      if (typeof data.badgeCount === "number" && "setAppBadge" in self.navigator) {
+        try {
+          if (data.badgeCount > 0) {
+            await self.navigator.setAppBadge(data.badgeCount);
+          } else {
+            await self.navigator.clearAppBadge();
+          }
+        } catch {
+          // Badging API non supportée par ce navigateur -- pas grave, la
+          // notification système elle-même s'est quand même affichée.
+        }
+      }
+    })()
+  );
+});
+
+// Clic sur la notification système -> ramène au premier plan un onglet déjà
+// ouvert sur l'app si possible, sinon en ouvre un nouveau sur le lien fourni.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = event.notification.data?.link || "/dashboard/notifications";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          if ("navigate" in client) client.navigate(link);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(link);
+    })
+  );
+});
