@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { EmployeesTable } from "@/components/dashboard/EmployeesTable";
 
@@ -23,7 +24,7 @@ export default async function EmployeesPage() {
   const canManage = ADMIN_ROLES.includes(ctx.role);
 
   const employees = await prisma.user.findMany({
-    where: { organizationId: ctx.organizationId },
+    where: { organizationId: ctx.organizationId, ...VISIBLE_USER }, // le propriétaire de la plateforme n'apparaît jamais (7.24)
     select: {
       id: true,
       firstName: true,

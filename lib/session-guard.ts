@@ -26,8 +26,8 @@ export class OrganizationSuspendedError extends Error {}
 
 /**
  * Récupère le contexte d'authentification depuis la session serveur.
- * Lève une erreur si l'utilisateur n'est pas connecté, ou si son
- * organisation a été suspendue depuis la dernière connexion (le token JWT
+ * Lève une erreur si l'utilisateur n'est pas connecté, si son compte a été
+ * désactivé, ou si son organisation a été suspendue depuis la dernière connexion (le token JWT
  * reste valide jusqu'à 8h — c'est cette vérification qui coupe l'accès en
  * temps réel, pas l'expiration du token).
  * -> organizationId vient TOUJOURS du token signé, jamais du body/query envoyé par le client.
@@ -37,26 +37,42 @@ export async function requireAuth(): Promise<AuthContext> {
   if (!session?.user) {
     throw new UnauthorizedError("Non authentifié");
   }
-  const user = session.user as any;
+  const sessionUser = session.user as any;
+  if (!sessionUser.id) {
+    throw new UnauthorizedError("Non authentifié");
+  }
+
+  // Rôle et statut relus EN BASE à chaque requête, pas depuis le token JWT
+  // (valide 8h) : quand l'admin principal désactive, retire ou promeut un
+  // co-admin (voir AUDIT.md 7.22), l'effet doit être immédiat, sans attendre
+  // que la personne se déconnecte. Même raisonnement que pour la suspension
+  // d'organisation ci-dessous. organizationId, lui, ne change jamais.
+  const dbUser = await prisma.user.findUnique({
+    where: { id: sessionUser.id },
+    select: {
+      role: true,
+      status: true,
+      organizationId: true,
+      departmentId: true,
+      organization: { select: { status: true } },
+    },
+  });
+  if (!dbUser || dbUser.status !== "ACTIVE" || dbUser.organizationId !== sessionUser.organizationId) {
+    throw new UnauthorizedError("Compte désactivé ou introuvable");
+  }
 
   // Le SUPER_ADMIN (vous) gère TOUTES les organisations clientes depuis
   // /platform — son accès ne doit jamais dépendre du statut de SA PROPRE
   // organisation interne (voir AUDIT.md 7.20).
-  if (user.role !== "SUPER_ADMIN") {
-    const organization = await prisma.organization.findUnique({
-      where: { id: user.organizationId },
-      select: { status: true },
-    });
-    if (organization?.status === "SUSPENDED") {
-      throw new OrganizationSuspendedError("Organisation suspendue");
-    }
+  if (dbUser.role !== "SUPER_ADMIN" && dbUser.organization.status === "SUSPENDED") {
+    throw new OrganizationSuspendedError("Organisation suspendue");
   }
 
   return {
-    userId: user.id,
-    organizationId: user.organizationId,
-    departmentId: user.departmentId ?? null,
-    role: user.role,
+    userId: sessionUser.id,
+    organizationId: dbUser.organizationId,
+    departmentId: dbUser.departmentId ?? null,
+    role: dbUser.role,
   };
 }
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError, ForbiddenError } from "@/lib/session-guard";
 
 const VALID_STATUSES = ["ACTIVE", "DISABLED"] as const;
@@ -29,10 +30,29 @@ export async function PATCH(
       return Response.json({ error: "Statut invalide" }, { status: 400 });
     }
 
+    // Les comptes administrateurs ne se gèrent PAS ici : seul l'admin
+    // principal peut désactiver un co-admin, depuis Paramètres > Équipe
+    // d'administration (PATCH /api/admins/[id], voir AUDIT.md 7.22). Sans
+    // cette garde, un co-admin pourrait désactiver l'admin principal.
+    // ...VISIBLE_USER : le compte propriétaire répond "introuvable" (404),
+    // jamais "interdit" -> son existence n'est même pas révélée (7.24).
+    const target = await prisma.user.findFirst({
+      where: { id, organizationId: ctx.organizationId, ...VISIBLE_USER },
+      select: { role: true },
+    });
+    if (!target) {
+      return Response.json({ error: "Utilisateur introuvable" }, { status: 404 });
+    }
+    if (target.role === "ORG_ADMIN" || target.role === "SUPER_ADMIN") {
+      throw new ForbiddenError(
+        "Les comptes administrateurs se gèrent depuis Paramètres > Équipe d'administration"
+      );
+    }
+
     // étape 3 : where combine id ET organizationId, impossible de toucher un
     // utilisateur d'une autre organisation même en devinant son id.
     const result = await prisma.user.updateMany({
-      where: { id, organizationId: ctx.organizationId },
+      where: { id, organizationId: ctx.organizationId, role: { notIn: ["ORG_ADMIN", "SUPER_ADMIN"] } },
       data: { status },
     });
 

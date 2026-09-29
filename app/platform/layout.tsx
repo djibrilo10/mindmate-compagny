@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { Fraunces, Inter } from "next/font/google";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 
 const fraunces = Fraunces({
@@ -26,17 +27,25 @@ export default async function PlatformLayout({ children }: { children: ReactNode
     redirect("/login");
   }
 
-  const user = session.user as { name?: string | null; email?: string | null; role?: string };
+  const user = session.user as { id?: string; name?: string | null; email?: string | null; role?: string };
 
   if (user.role !== "SUPER_ADMIN") {
     redirect("/dashboard");
   }
 
   const userLabel = user.name || user.email || "Propriétaire";
+  // Badge "Support" : demandes avec un message d'admin pas encore lu (7.24).
+  const [supportUnread, unreadNotifications] = await Promise.all([
+    prisma.supportTicket.count({ where: { unreadByPlatform: true } }),
+    // Cloche du propriétaire (7.25) : SES notifications non lues.
+    user.id
+      ? prisma.notification.count({ where: { userId: user.id, isRead: false, type: "SUPPORT_MESSAGE" } })
+      : 0,
+  ]);
 
   return (
     <div className={`${fraunces.variable} ${inter.variable} font-[family-name:var(--font-body)]`}>
-      <PlatformShell userLabel={userLabel}>{children}</PlatformShell>
+      <PlatformShell userLabel={userLabel} supportUnread={supportUnread} unreadNotifications={unreadNotifications}>{children}</PlatformShell>
     </div>
   );
 }

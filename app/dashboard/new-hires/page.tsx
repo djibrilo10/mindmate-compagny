@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { PartyPopper, Sparkles, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 
 // Visible par TOUS les employés de l'organisation (comme la liste des
@@ -51,6 +52,7 @@ export default async function NewHiresPage() {
       organizationId: ctx.organizationId,
       status: "ACTIVE",
       hireDate: { not: null },
+      ...VISIBLE_USER,
     },
     select: {
       id: true,

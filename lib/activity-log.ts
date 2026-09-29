@@ -29,6 +29,15 @@ export type AuditAction =
   | "USER_DISABLED"
   | "USER_REACTIVATED"
   | "USER_JOINED"
+  | "USER_ADMIN_ADDED"
+  | "USER_ADMIN_REMOVED"
+  | "USER_ADMIN_DISABLED"
+  | "USER_ADMIN_REACTIVATED"
+  | "SURVEY_CREATED"
+  | "SURVEY_CLOSED"
+  | "SURVEY_REOPENED"
+  | "SURVEY_DELETED"
+  | "SUPPORT_MESSAGE"
   | "ORGANIZATION_INVITE_CODE_REGENERATED"
   | "ORGANIZATION_LOGO_UPDATED"
   | "ORGANIZATION_LOGO_REMOVED"
@@ -44,6 +53,8 @@ export type ActivityCategory =
   | "MESSAGE"
   | "REVIEW"
   | "USER"
+  | "SURVEY"
+  | "SUPPORT"
   | "ORGANIZATION";
 
 export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
@@ -55,6 +66,8 @@ export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   MESSAGE: "Messages",
   REVIEW: "Avis",
   USER: "Employés",
+  SURVEY: "Sondages",
+  SUPPORT: "Assistance",
   ORGANIZATION: "Organisation",
 };
 
@@ -80,6 +93,15 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   USER_DISABLED: "a désactivé un compte employé",
   USER_REACTIVATED: "a réactivé un compte employé",
   USER_JOINED: "a rejoint l'organisation via le code d'invitation",
+  USER_ADMIN_ADDED: "a ajouté un co-admin",
+  USER_ADMIN_REMOVED: "a retiré un co-admin",
+  USER_ADMIN_DISABLED: "a désactivé un co-admin",
+  USER_ADMIN_REACTIVATED: "a réactivé un co-admin",
+  SURVEY_CREATED: "a publié un sondage",
+  SURVEY_CLOSED: "a fermé un sondage",
+  SURVEY_REOPENED: "a rouvert un sondage",
+  SURVEY_DELETED: "a supprimé un sondage",
+  SUPPORT_MESSAGE: "a envoyé un message d'assistance", // type de notification seulement (7.24/7.25), jamais écrit dans AuditLog
   ORGANIZATION_INVITE_CODE_REGENERATED: "a régénéré le code d'invitation de l'organisation",
   ORGANIZATION_LOGO_UPDATED: "a mis à jour le logo de l'organisation",
   ORGANIZATION_LOGO_REMOVED: "a retiré le logo personnalisé de l'organisation",
@@ -153,6 +175,24 @@ export function actionDetail(action: string, metadata: unknown): string | null {
     case "JOB_APPLICATION_STATUS_UPDATED": {
       const status = typeof data?.status === "string" ? data.status : null;
       return status ? `→ ${APPLICATION_STATUS_LABELS[status] ?? status}` : null;
+    }
+    case "USER_ADMIN_ADDED":
+    case "USER_ADMIN_REMOVED":
+    case "USER_ADMIN_DISABLED":
+    case "USER_ADMIN_REACTIVATED": {
+      const name = typeof data?.name === "string" ? data.name : null;
+      const reason = typeof data?.reason === "string" ? data.reason : null;
+      const suffix =
+        reason === "replaced" ? " (remplacé)" : reason === "removed_and_disabled" ? " (compte désactivé)" : "";
+      return name ? `${name}${suffix}` : null;
+    }
+    case "SURVEY_CREATED":
+    case "SURVEY_CLOSED":
+    case "SURVEY_REOPENED":
+    case "SURVEY_DELETED": {
+      const title = typeof data?.title === "string" ? data.title : null;
+      const anonymous = data?.anonymous === true ? " · anonyme" : data?.anonymous === false ? " · nominatif" : "";
+      return title ? `« ${title} »${action === "SURVEY_CREATED" ? anonymous : ""}` : null;
     }
     default:
       return null;

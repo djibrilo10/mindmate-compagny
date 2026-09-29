@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 
 export default async function DepartmentsPage() {
@@ -18,7 +19,7 @@ export default async function DepartmentsPage() {
       id: true,
       name: true,
       createdAt: true,
-      _count: { select: { users: true } },
+      _count: { select: { users: { where: VISIBLE_USER } } },
     },
     orderBy: { name: "asc" },
   });

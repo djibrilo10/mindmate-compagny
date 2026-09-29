@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { toCsv } from "@/lib/csv";
 import { renderTablePdf } from "@/lib/pdf";
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     const format = new URL(request.url).searchParams.get("format") === "pdf" ? "pdf" : "csv";
 
     const employees = await prisma.user.findMany({
-      where: { organizationId: ctx.organizationId },
+      where: { organizationId: ctx.organizationId, ...VISIBLE_USER },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: {
         firstName: true,

@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         },
       });
 
-      await tx.user.create({
+      const admin = await tx.user.create({
         data: {
           firstName,
           lastName,
@@ -71,6 +71,12 @@ export async function POST(request: Request) {
           organizationId: organization.id,
           departmentId: generalDepartment.id,
         },
+      });
+
+      // Le créateur de l'organisation en est l'admin PRINCIPAL (voir AUDIT.md 7.22).
+      await tx.organization.update({
+        where: { id: organization.id },
+        data: { primaryAdminId: admin.id },
       });
     });
   } catch (error) {

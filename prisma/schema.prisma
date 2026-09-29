@@ -61,6 +61,16 @@ enum ApplicationStatus {
   REJECTED
 }
 
+enum SurveyStatus {
+  OPEN    // les employés peuvent répondre
+  CLOSED  // fermé manuellement par un admin, ou date de clôture dépassée (voir lib/surveys.ts)
+}
+
+enum SupportTicketStatus {
+  OPEN      // en attente / en cours
+  RESOLVED  // marqué résolu par le propriétaire de la plateforme
+}
+
 enum UserStatus {
   ACTIVE
   DISABLED   // "supprimé" par l'admin -> on désactive, on ne supprime jamais vraiment (traçabilité)
@@ -80,6 +90,11 @@ model Organization {
   logoUpdatedAt  DateTime? // sert à invalider le cache navigateur de l'image après un changement (voir GET /api/organization/logo)
   status         OrganizationStatus @default(ACTIVE) // géré depuis /platform par le SUPER_ADMIN (voir AUDIT.md 7.20)
   suspendedAt    DateTime? // date de la dernière suspension, affichée dans /platform/organizations
+  // Admin PRINCIPAL de l'organisation (voir AUDIT.md 7.22) : le seul qui peut
+  // ajouter/désactiver/retirer/remplacer les 2 co-admins. Nullable pour les
+  // organisations créées avant cette fonctionnalité : rempli paresseusement
+  // (ORG_ADMIN le plus ancien) par lib/admins.ts au premier besoin.
+  primaryAdminId String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -91,6 +106,8 @@ model Organization {
   auditLogs        AuditLog[]
   invitations      Invitation[]
   notifications    Notification[]
+  surveys          Survey[]
+  supportTickets   SupportTicket[]
 
   @@map("organizations")
 }
@@ -145,6 +162,10 @@ model User {
   filesUploaded        FileUpload[]      @relation("FileUploader")
   notifications        Notification[]
   pushSubscriptions    PushSubscription[]
+  surveysCreated       Survey[]              @relation("SurveyAuthor")
+  surveyParticipations SurveyParticipation[]
+  supportTickets       SupportTicket[]       @relation("SupportTicketAuthor")
+  supportMessages      SupportMessage[]      @relation("SupportMessageSender")
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -412,6 +433,152 @@ model PushSubscription {
   @@index([organizationId])
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+// ------------------------------------------------------------
+// SURVEY — sondage créé par un admin pour tous les employés (voir AUDIT.md 7.23).
+// Un sondage = 1 à 10 questions, chacune avec 2 à 6 choix.
+// isAnonymous est choisi PAR SONDAGE à la création et ne peut plus changer
+// ensuite (sinon des réponses données "anonymement" pourraient devenir
+// nominatives) :
+//  - anonyme   : SurveyAnswer.participationId reste NULL -> impossible, même
+//                en base, de relier une réponse à un employé. On garde
+//                seulement SurveyParticipation (qui a déjà répondu) pour
+//                empêcher de voter deux fois et calculer le taux de participation.
+//  - nominatif : SurveyAnswer.participationId est rempli -> les admins voient
+//                qui a répondu quoi.
+// ------------------------------------------------------------
+model Survey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User         @relation("SurveyAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  title          String
+  description    String?
+  isAnonymous    Boolean      @default(true)
+  status         SurveyStatus @default(OPEN)
+  closesAt       DateTime?    // date de clôture automatique (optionnelle)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  questions      SurveyQuestion[]
+  participations SurveyParticipation[]
+  answers        SurveyAnswer[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("surveys")
+}
+
+model SurveyQuestion {
+  id       String         @id @default(cuid())
+  surveyId String
+  survey   Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  position Int
+  text     String
+
+  options  SurveyOption[]
+  answers  SurveyAnswer[]
+
+  @@index([surveyId])
+  @@map("survey_questions")
+}
+
+model SurveyOption {
+  id         String         @id @default(cuid())
+  questionId String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  position   Int
+  label      String
+
+  answers    SurveyAnswer[]
+
+  @@index([questionId])
+  @@map("survey_options")
+}
+
+// Qui a DÉJÀ répondu (un employé = une participation par sondage). Ne dit
+// jamais CE qu'il a répondu pour un sondage anonyme.
+model SurveyParticipation {
+  id             String   @id @default(cuid())
+  organizationId String
+  surveyId       String
+  survey         Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  answers        SurveyAnswer[]
+
+  @@unique([surveyId, userId]) // impossible de répondre deux fois, même en cas de double clic
+  @@index([organizationId])
+  @@map("survey_participations")
+}
+
+model SurveyAnswer {
+  id              String               @id @default(cuid())
+  organizationId  String
+  surveyId        String
+  survey          Survey               @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        SurveyQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionId        String
+  option          SurveyOption         @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  participationId String?              // NULL pour un sondage anonyme (voir Survey)
+  participation   SurveyParticipation? @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  departmentId    String?              // département de l'employé AU MOMENT de répondre, pour la ventilation par département
+
+  @@index([surveyId])
+  @@index([questionId])
+  @@map("survey_answers")
+}
+
+// ------------------------------------------------------------
+// SUPPORT — canal privé admin principal -> propriétaire de la plateforme
+// (voir AUDIT.md 7.24). Seul l'admin PRINCIPAL d'une organisation peut
+// ouvrir une demande (bouton "Contacter Djibril" dans Paramètres) ; le
+// propriétaire (SUPER_ADMIN) la lit et répond depuis /platform/support.
+// Côté organisation, les réponses sont signées "Djibril — Mindmate
+// Compagny" : le compte SUPER_ADMIN lui-même n'est jamais exposé.
+// ------------------------------------------------------------
+model SupportTicket {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User                @relation("SupportTicketAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  subject        String
+  status         SupportTicketStatus @default(OPEN)
+  unreadByPlatform Boolean           @default(true)  // nouveau message de l'admin pas encore lu par le propriétaire
+  unreadByAuthor   Boolean           @default(false) // réponse du propriétaire pas encore lue par l'admin
+  lastMessageAt  DateTime            @default(now())
+
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  messages       SupportMessage[]
+
+  @@index([organizationId])
+  @@index([status, lastMessageAt])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id           String        @id @default(cuid())
+  ticketId     String
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId     String
+  sender       User          @relation("SupportMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  fromPlatform Boolean       @default(false) // true = réponse du propriétaire de la plateforme
+  content      String
+  createdAt    DateTime      @default(now())
+
+  @@index([ticketId])
+  @@map("support_messages")
 }
 
 // ------------------------------------------------------------

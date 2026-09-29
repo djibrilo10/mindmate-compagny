@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, handleAuthError } from "@/lib/session-guard";
 
 // GET /api/messages/[counterpartId] -> l'historique complet de la conversation
@@ -15,7 +16,7 @@ export async function GET(
 
     // étape 3 : l'autre personne doit appartenir à la même organisation.
     const counterpart = await prisma.user.findFirst({
-      where: { id: counterpartId, organizationId: ctx.organizationId },
+      where: { id: counterpartId, organizationId: ctx.organizationId, ...VISIBLE_USER },
       select: { id: true, firstName: true, lastName: true, role: true },
     });
     if (!counterpart) {

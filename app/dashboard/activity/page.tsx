@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { History } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { ActivityLogList } from "@/components/dashboard/ActivityLogList";
 
@@ -59,7 +60,7 @@ export default async function ActivityPage() {
 
   const relatedUsers = relatedUserIds.size
     ? await prisma.user.findMany({
-        where: { id: { in: Array.from(relatedUserIds) }, organizationId: ctx.organizationId },
+        where: { id: { in: Array.from(relatedUserIds) }, organizationId: ctx.organizationId, ...VISIBLE_USER },
         select: { id: true, firstName: true, lastName: true, role: true },
       })
     : [];

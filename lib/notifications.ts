@@ -67,7 +67,9 @@ export async function notifyRoles(
     where: {
       organizationId,
       status: "ACTIVE",
-      role: { in: roles },
+      // Jamais le propriétaire de la plateforme, même si SUPER_ADMIN figure
+      // dans la liste des rôles (7.24) : il a son propre canal, /platform/support.
+      role: { in: roles.filter((r) => r !== "SUPER_ADMIN") },
       ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
     },
     select: { id: true },
@@ -85,6 +87,7 @@ export async function notifyOrganization(
     where: {
       organizationId,
       status: "ACTIVE",
+      role: { not: "SUPER_ADMIN" }, // voir notifyRoles ci-dessus (7.24)
       ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
     },
     select: { id: true },

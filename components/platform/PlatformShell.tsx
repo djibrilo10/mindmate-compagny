@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, LayoutDashboard, Menu, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Bell, Building2, LayoutDashboard, LifeBuoy, Menu, ShieldCheck, type LucideIcon } from "lucide-react";
 import { SignOutButton } from "@/components/dashboard/SignOutButton";
 
 // ------------------------------------------------------------
@@ -17,11 +17,36 @@ import { SignOutButton } from "@/components/dashboard/SignOutButton";
 const PLATFORM_NAV: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Vue d'ensemble", href: "/platform", icon: LayoutDashboard },
   { label: "Organisations", href: "/platform/organizations", icon: Building2 },
+  { label: "Support", href: "/platform/support", icon: LifeBuoy }, // messages des admins principaux (AUDIT.md 7.24)
+  { label: "Notifications", href: "/platform/notifications", icon: Bell }, // (AUDIT.md 7.25)
 ];
 
-export function PlatformShell({ userLabel, children }: { userLabel: string; children: ReactNode }) {
+export function PlatformShell({
+  userLabel,
+  supportUnread = 0,
+  unreadNotifications = 0,
+  children,
+}: {
+  userLabel: string;
+  supportUnread?: number;
+  unreadNotifications?: number;
+  children: ReactNode;
+}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const pathname = usePathname();
+
+  // Badge numérique sur l'icône de l'app installée (PWA), resynchronisé à
+  // chaque page de la console avec le vrai nombre de non-lus (AUDIT.md 7.25).
+  // Quand l'app est fermée, c'est public/sw.js qui le met à jour à chaque push.
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (!nav.setAppBadge) return;
+    if (unreadNotifications > 0) nav.setAppBadge(unreadNotifications).catch(() => {});
+    else nav.clearAppBadge?.().catch(() => {});
+  }, [unreadNotifications]);
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] lg:grid lg:grid-cols-[240px_1fr]">
@@ -66,6 +91,16 @@ export function PlatformShell({ userLabel, children }: { userLabel: string; chil
                   strokeWidth={1.75}
                 />
                 {item.label}
+                {item.href === "/platform/notifications" && unreadNotifications > 0 && (
+                  <span className="ml-auto rounded-full bg-[#8A3B3B] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
+                {item.href === "/platform/support" && supportUnread > 0 && (
+                  <span className="ml-auto rounded-full bg-[#C2542C] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {supportUnread}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -95,6 +130,19 @@ export function PlatformShell({ userLabel, children }: { userLabel: string; chil
             </span>
           </div>
           <div className="flex items-center gap-4">
+            {/* Cloche + badge, comme dans le Topbar des organisations (7.25). */}
+            <Link
+              href="/platform/notifications"
+              aria-label={unreadNotifications > 0 ? `Notifications (${unreadNotifications} non lues)` : "Notifications"}
+              className="relative rounded-md p-2 text-[#1C2438] transition-colors hover:bg-[#F0F1F4]"
+            >
+              <Bell className="h-[19px] w-[19px]" strokeWidth={1.8} />
+              {unreadNotifications > 0 && (
+                <span className="animate-pulse-soft absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#8A3B3B] px-1 text-[10px] font-semibold text-white shadow-[0_0_0_2px_white]">
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </span>
+              )}
+            </Link>
             <span className="hidden text-sm text-[#5B6478] sm:inline">{userLabel}</span>
             <SignOutButton />
           </div>

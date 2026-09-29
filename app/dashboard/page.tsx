@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Briefcase,
   CalendarDays,
+  ClipboardList,
   FileText,
   Flag,
   Mail,
@@ -14,9 +15,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { actionCategory, actionDetail, actionLabel } from "@/lib/activity-log";
 import { CategoryIcon } from "@/components/dashboard/CategoryIcon";
+import { SurveyResultsView } from "@/components/dashboard/SurveyResultsView";
+import { getSurveyResults, isSurveyOpen, type SurveyResults } from "@/lib/surveys";
 
 // ------------------------------------------------------------
 // Tableau de bord (Phase 4) — vue d'ensemble chiffrée.
@@ -33,6 +37,7 @@ const NEW_HIRE_WINDOW_DAYS = 30;
 const RECENT_ANNOUNCEMENTS_COUNT = 3;
 const RECENT_JOBS_COUNT = 3;
 const RECENT_ACTIVITY_COUNT = 6;
+const DASHBOARD_SURVEYS_COUNT = 2; // sondages dont les résultats sont affichés sur le tableau de bord (admins)
 
 // Teintes douces par carte (passe esthétique, voir AUDIT.md 14) : purement
 // décoratif, aucune signification métier — juste pour éviter que 10 cartes
@@ -101,9 +106,9 @@ export default async function DashboardPage() {
     recentAnnouncements,
     recentOpenJobs,
   ] = await Promise.all([
-    prisma.user.count({ where: { organizationId: ctx.organizationId, status: "ACTIVE" } }),
+    prisma.user.count({ where: { organizationId: ctx.organizationId, status: "ACTIVE", ...VISIBLE_USER } }),
     prisma.user.count({
-      where: { organizationId: ctx.organizationId, status: "ACTIVE", hireDate: { gte: thirtyDaysAgo } },
+      where: { organizationId: ctx.organizationId, status: "ACTIVE", hireDate: { gte: thirtyDaysAgo }, ...VISIBLE_USER },
     }),
     prisma.jobPosting.count({ where: { organizationId: ctx.organizationId, status: "OPEN" } }),
     prisma.fileUpload.count({ where: { organizationId: ctx.organizationId } }),
@@ -126,6 +131,35 @@ export default async function DashboardPage() {
       select: { id: true, title: true, createdAt: true },
     }),
   ]);
+
+  // Sondages (voir AUDIT.md 7.23) : pour tout le monde, le nombre de
+  // sondages ouverts auxquels je n'ai pas encore répondu ; pour les admins,
+  // les résultats des derniers sondages, affichés en grand plus bas.
+  const [openSurveys, mySurveyParticipations] = await Promise.all([
+    prisma.survey.findMany({
+      where: { organizationId: ctx.organizationId, status: "OPEN" },
+      select: { id: true, status: true, closesAt: true },
+    }),
+    prisma.surveyParticipation.findMany({
+      where: { organizationId: ctx.organizationId, userId: ctx.userId },
+      select: { surveyId: true },
+    }),
+  ]);
+  const answeredSurveyIds = new Set(mySurveyParticipations.map((p) => p.surveyId));
+  const surveysToAnswer = openSurveys.filter((s) => isSurveyOpen(s) && !answeredSurveyIds.has(s.id)).length;
+
+  let surveyResults: SurveyResults[] = [];
+  if (ctx.role === "ORG_ADMIN") {
+    const latest = await prisma.survey.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { createdAt: "desc" },
+      take: DASHBOARD_SURVEYS_COUNT,
+      select: { id: true },
+    });
+    surveyResults = (
+      await Promise.all(latest.map((s) => getSurveyResults(s.id, ctx.organizationId)))
+    ).filter((r): r is SurveyResults => r !== null);
+  }
 
   // Cartes réservées à ORG_ADMIN/MANAGER/SUPER_ADMIN (même accès que les
   // pages Signalements et Absences elles-mêmes).
@@ -179,7 +213,7 @@ export default async function DashboardPage() {
     const actorIds = Array.from(new Set(logs.map((l) => l.actorId).filter((id): id is string => !!id)));
     const actors = actorIds.length
       ? await prisma.user.findMany({
-          where: { id: { in: actorIds }, organizationId: ctx.organizationId },
+          where: { id: { in: actorIds }, organizationId: ctx.organizationId, ...VISIBLE_USER },
           select: { id: true, firstName: true, lastName: true },
         })
       : [];
@@ -257,6 +291,14 @@ export default async function DashboardPage() {
           href="/dashboard/absences"
           delay={0.22}
         />
+        <StatCard
+          icon={ClipboardList}
+          tint="purple"
+          label="Sondages à compléter"
+          value={surveysToAnswer}
+          href="/dashboard/surveys"
+          delay={0.24}
+        />
         {isManagement && (
           <StatCard
             icon={Flag}
@@ -298,6 +340,36 @@ export default async function DashboardPage() {
           />
         )}
       </div>
+
+      {ctx.role === "ORG_ADMIN" && (
+        <section className="mt-6 animate-fade-in-up stagger-5 opacity-0">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg text-[#1C2438]">
+              <ClipboardList className="h-5 w-5 text-[#5B3E9C]" strokeWidth={1.9} />
+              Résultats des sondages
+            </h2>
+            <Link
+              href="/dashboard/settings#sondages"
+              className="group flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
+            >
+              {surveyResults.length === 0 ? "Créer un sondage" : "Tous les sondages"}
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
+            </Link>
+          </div>
+          {surveyResults.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#E2E4E9] bg-white px-6 py-8 text-center text-sm text-[#5B6478]">
+              Aucun sondage pour le moment. Crée-en un dans Paramètres pour mesurer l&apos;avis de tes équipes
+              (productivité, satisfaction…) : les résultats s&apos;afficheront ici.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              {surveyResults.map((r) => (
+                <SurveyResultsView key={r.id} results={r} compact />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="animate-fade-in-up stagger-6 rounded-xl border border-[#E2E4E9] bg-white p-5 opacity-0 transition-shadow duration-200 hover:shadow-[0_8px_20px_-6px_rgba(28,36,56,0.1)]">

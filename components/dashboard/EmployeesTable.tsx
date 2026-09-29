@@ -132,6 +132,10 @@ export function EmployeesTable({
                   <td className="px-4 py-3">
                     {isSelf ? (
                       <span className="text-xs text-[#9AA1B2]">—</span>
+                    ) : employee.role === "ORG_ADMIN" || employee.role === "SUPER_ADMIN" ? (
+                      // Comptes admin : gérés uniquement par l'admin principal
+                      // dans Paramètres (voir AUDIT.md 7.22).
+                      <span className="text-xs text-[#9AA1B2]">Géré dans Paramètres</span>
                     ) : employee.status === "ACTIVE" ? (
                       <button
                         onClick={() => toggleStatus(employee.id, "DISABLED")}

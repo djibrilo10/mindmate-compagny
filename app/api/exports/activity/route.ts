@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { toCsv } from "@/lib/csv";
 import { renderTablePdf } from "@/lib/pdf";
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     const actorIds = Array.from(new Set(logs.map((l) => l.actorId).filter((id): id is string => !!id)));
     const actors = actorIds.length
       ? await prisma.user.findMany({
-          where: { id: { in: actorIds }, organizationId: ctx.organizationId },
+          where: { id: { in: actorIds }, organizationId: ctx.organizationId, ...VISIBLE_USER },
           select: { id: true, firstName: true, lastName: true },
         })
       : [];

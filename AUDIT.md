@@ -95,6 +95,8 @@ enum JobPostingStatus { OPEN  CLOSED }
 enum ApplicationStatus { RECEIVED  IN_REVIEW  ACCEPTED  REJECTED }
 enum UserStatus { ACTIVE  DISABLED }
 enum OrganizationStatus { ACTIVE  SUSPENDED }
+enum SurveyStatus { OPEN  CLOSED }
+enum SupportTicketStatus { OPEN  RESOLVED }
 ```
 
 - `SUPER_ADMIN` : réservé au porteur du produit (vous — gère toutes les organisations clientes). Depuis le 26 sept. 2026, dispose de son propre espace `/platform` (voir 7.20), totalement séparé du dashboard des entreprises clientes. Attribué uniquement via `scripts/promote-super-admin.ts` (jamais depuis l'UI — voir 7.20).
@@ -143,6 +145,16 @@ Points importants :
 
 **`Notification`** (Phase 4, voir 7.15) — `userId` (destinataire, **vraie** relation Prisma vers `User`, contrairement à `AuditLog.actorId`), `type` (String, mêmes valeurs que `AuditLog.action`), `title`, `body?`, `link?`, `isRead` (default `false`), `createdAt`. Volontairement un modèle séparé d'`AuditLog` : une notification cible **un seul utilisateur** et représente un état lu/non lu pour lui, alors qu'`AuditLog` trace toutes les actions de l'organisation pour l'admin (traçabilité). `type` réutilise délibérément les mêmes chaînes que `AuditLog.action` (ex. `"REPORT_CREATED"`) pour réutiliser `actionCategory()`/`CATEGORY_ICONS` de `lib/activity-log.ts` côté affichage, sans dupliquer le mapping icône/catégorie.
 
+**`Organization.primaryAdminId`** (29 sept. 2026, voir 7.22) — id de l'admin **principal** (`String?`, pas de relation Prisma). Rempli à l'inscription pour les nouvelles organisations ; pour les anciennes, rempli paresseusement (ORG_ADMIN le plus ancien) par `lib/admins.ts > getPrimaryAdminId()`.
+
+**`Survey` / `SurveyQuestion` / `SurveyOption` / `SurveyParticipation` / `SurveyAnswer`** (29 sept. 2026, voir 7.23) — sondages.
+- `Survey` : `organizationId, authorId (relation "SurveyAuthor"), title, description?, isAnonymous, status (SurveyStatus), closesAt?`. `isAnonymous` est fixé à la création et **ne peut plus changer** (aucune route ne le modifie).
+- `SurveyQuestion` (`position, text`) → `SurveyOption` (`position, label`), 1 à 10 questions, 2 à 6 choix chacune.
+- `SurveyParticipation` : `surveyId, userId`, **`@@unique([surveyId, userId])`** → impossible de répondre deux fois (même en double clic). Sert aussi au taux de participation.
+- `SurveyAnswer` : `questionId, optionId, participationId?, departmentId?`. **Sondage anonyme → `participationId` NULL et aucune date** : aucun lien possible entre une réponse et une personne, même en lisant la base. `departmentId` = département au moment de répondre (ventilation par département, masquée sous 5 répondants pour un sondage anonyme).
+
+**`SupportTicket` / `SupportMessage`** (29 sept. 2026, voir 7.24) — canal privé admin principal → propriétaire. `SupportTicket` : `organizationId, authorId (relation "SupportTicketAuthor"), subject, status (SupportTicketStatus), unreadByPlatform, unreadByAuthor, lastMessageAt`. `SupportMessage` : `ticketId, senderId (relation "SupportMessageSender"), fromPlatform, content`.
+
 ### 4.3 Schéma complet (référence)
 
 Le fichier `prisma/schema.prisma` fait ~360 lignes. Il contient tous les modèles ci-dessus, avec pour chacun les index (`@@index([organizationId])` quasi systématique) qui gardent les requêtes filtrées-par-tenant rapides. En cas de reconstruction, le fichier réel sur le projet fait foi — cette section en est le résumé explicatif, pas une copie ligne à ligne à resynchroniser manuellement.
@@ -166,6 +178,10 @@ Le fichier `prisma/schema.prisma` fait ~360 lignes. Il contient tous les modèle
 20260926______add_organization_status            — ajout de OrganizationStatus + Organization.status/suspendedAt (7.20) ;
                                                     à exécuter avec `npx prisma migrate dev --name add_organization_status` ;
                                                     nom exact (horodatage) à confirmer et reporter ici une fois lancé.
+20260929065448_add_admin_team_and_surveys       — Organization.primaryAdminId + SurveyStatus + modèles Survey*
+                                                    (7.22/7.23) ; EXÉCUTÉE avec succès le 29 sept. 2026.
+20260929______add_platform_support               — SupportTicketStatus + SupportTicket/SupportMessage (7.24) ; à exécuter avec
+                                                    `npx prisma migrate dev --name add_platform_support`.
 ```
 
 Point important : **JobPosting, JobApplication, Message et Review existaient déjà dans le schéma initial** (`init`). Construire ces fonctionnalités plus tard n'a donc demandé AUCUNE migration — seulement du code applicatif (routes API + pages). Ne pas supposer qu'une nouvelle fonctionnalité = nouvelle migration : vérifier d'abord si le modèle existe déjà dans le schéma.
@@ -474,6 +490,9 @@ Pour chaque fonctionnalité : qui y a accès, quelles routes API, quelles règle
 | Export de rapports | ❌ (page bloquée, redirection) | ✅ Employés/Absences/Signalements | ✅ + Historique d'activité |
 | Paramètres (logo, code d'invitation) | ❌ (page bloquée, redirection) | ❌ (page bloquée, redirection) | ✅ seul rôle avec accès (éditer/régénérer) |
 | Logo de l'organisation (affichage) | ✅ lecture (barre latérale) | ✅ lecture | ✅ lecture + édition (Paramètres) |
+| Équipe d'administration (Paramètres) | ❌ | ❌ | ✅ voir l'équipe ; **admin principal seul** : ajouter/désactiver/réactiver/remplacer/retirer les co-admins (max 2) |
+| Contacter le propriétaire (« Contacter Djibril ») | ❌ | ❌ | **admin principal seul** (co-admins exclus) |
+| Sondages | ✅ répondre (1×/sondage) | ✅ répondre | ✅ + créer/fermer/rouvrir/supprimer (Paramètres) + résultats (tableau de bord + `/dashboard/surveys/[id]`) |
 
 Ce tableau décrit les droits **à l'intérieur d'une organisation cliente**. L'espace `/platform` (7.20) est différent par nature : il n'appartient à aucune organisation cliente, seul le `SUPER_ADMIN` (vous) y a accès, et il voit TOUTES les organisations à la fois — voir 7.20 plutôt que ce tableau.
 
@@ -692,6 +711,51 @@ Jusqu'ici l'app ne tournait qu'en local (`npm run dev` / `npm run start` sur `lo
 
 ---
 
+### 7.22 Équipe d'administration : admin principal + 2 co-admins (29 sept. 2026)
+
+**Demande de l'utilisateur** : avec ~500 employés, un seul admin ne suffit pas. Il faut 1 admin principal qui peut ajouter 2 autres admins avec les mêmes droits depuis les Paramètres ; les co-admins font tout ce que fait le principal, mais le principal peut à tout moment les désactiver/réactiver, les supprimer ou les remplacer. Décisions confirmées par l'utilisateur : ajout **par promotion d'un employé existant ET par création d'un compte neuf** ; **2 co-admins maximum** (3 admins au total).
+
+- **Modèle** : pas de nouveau rôle. Les co-admins sont des `ORG_ADMIN` comme le principal → mêmes droits partout (aucune autre route n'a eu à changer). Le principal est désigné par `Organization.primaryAdminId`. Constante `MAX_CO_ADMINS = 2` dans `lib/admins.ts`.
+- **Routes** : `GET /api/admins` (tout ORG_ADMIN) ; `POST /api/admins` (principal seul — `mode: "promote"` avec `userId`, ou `mode: "create"` avec prénom/nom/courriel/mot de passe temporaire ; `replaceUserId` optionnel = remplacement dans la même transaction) ; `PATCH /api/admins/[id]` (activer/désactiver) ; `DELETE /api/admins/[id]` (retirer : redevient `EMPLOYEE`, avec `disableAccount` optionnel pour désactiver aussi le compte — jamais de suppression réelle, cf. 5.3). Ajoutées à `middleware.ts`.
+- **Règles** : un co-admin désactivé garde son rôle et **occupe toujours sa place** (réactivable) ; pour libérer la place, le principal le retire ou le remplace. Le principal ne peut être ni modifié ni remplacé par ces routes.
+- **Faille corrigée au passage** : `PATCH /api/users/[id]` permettait à n'importe quel ORG_ADMIN de désactiver n'importe quel compte, y compris un autre admin. Désormais les comptes `ORG_ADMIN`/`SUPER_ADMIN` sont refusés sur cette route (403) : ils se gèrent uniquement via `/api/admins`. La page Employés affiche « Géré dans Paramètres » sur ces lignes.
+- **Effet immédiat** : `lib/session-guard.ts > requireAuth()` relit maintenant **le rôle et le statut en base** à chaque requête (au lieu de se fier au token JWT valable 8 h). Un co-admin désactivé perd l'accès tout de suite ; un employé promu voit les menus admin sans se reconnecter ; un co-admin retiré les perd tout de suite. `app/dashboard/layout.tsx` fait de même pour le menu. Coût : une requête `findUnique` par appel (celle de l'organisation est fusionnée dedans).
+- **Traçabilité** : actions `USER_ADMIN_ADDED`, `USER_ADMIN_REMOVED` (metadata `reason: replaced | removed | removed_and_disabled`), `USER_ADMIN_DISABLED`, `USER_ADMIN_REACTIVATED` (catégorie Employés). Notification à la personne promue/retirée.
+- **UI** : `components/dashboard/AdminsCard.tsx` sur `/dashboard/settings` (recherche d'employé par nom/courriel pour les grandes organisations).
+
+### 7.23 Sondages (29 sept. 2026)
+
+**Demande de l'utilisateur** : les admins doivent pouvoir faire des sondages pour tous les employés (ex. « Pensez-vous que la productivité doit s'améliorer ? 1. Oui 2. Non 3. Pas vraiment »), disponibles depuis les Paramètres ; une fois complétés, les résultats doivent être visibles sur le tableau de bord de la manière la plus explicite possible. Décisions confirmées : **plusieurs questions par sondage**, **anonymat choisi par sondage**.
+
+- **Création/gestion** (admins, principal ou co-admins) : `components/dashboard/SurveyManager.tsx` dans Paramètres (ancre `#sondages`) — titre, description, anonyme/nominatif, clôture automatique optionnelle, 1–10 questions × 2–6 choix, modèles « Productivité » et « Satisfaction ». Liste avec taux de participation, Fermer/Rouvrir, Supprimer (confirmation en deux temps). Routes `POST /api/surveys`, `PATCH`/`DELETE /api/surveys/[id]`. Validation zod dans `lib/surveys.ts`. Publication = notification à tous les employés actifs (7.15).
+- **Réponse** (tout le monde) : nouvelle page `/dashboard/surveys` (entrée « Sondages » dans le menu) + `components/dashboard/SurveyAnswerForm.tsx`. L'employé voit **avant de répondre** si le sondage est anonyme ou nominatif. Route `POST /api/surveys/[id]/responses` : une réponse par question obligatoire, chaque choix doit appartenir à sa question, sondage ouvert et non expiré, une seule participation (contrainte unique + transaction, erreur 409 si déjà répondu).
+- **Anonymat** : voir 4.2 — réponses sans `participationId` ni date ; ventilation par département masquée sous `MIN_GROUP_SIZE = 5` répondants ; le nom de l'auteur n'est jamais exposé. Sondage nominatif : tableau « qui a répondu quoi » sur la page de résultats.
+- **Résultats** : `lib/surveys.ts > getSurveyResults()` (groupBy par choix et par département) + `components/dashboard/SurveyResultsView.tsx` (composant serveur, barres HTML/CSS, pas de bibliothèque). Sur le **tableau de bord** (ORG_ADMIN) : section « Résultats des sondages » avec les 2 derniers sondages en version compacte (participation, 2 premières questions). Page complète `/dashboard/surveys/[id]` (ORG_ADMIN seulement) : toutes les questions, ventilation par département (barres empilées + vue tableau), réponses individuelles si nominatif. Chaque question a une **phrase d'analyse automatique** (majorité large/simple, avis partagés, égalité, trop peu de réponses) et un indicateur de **fiabilité** selon le taux de participation. Couleurs : barres d'une seule teinte (choix en tête foncé) ; palette par choix validée pour le daltonisme (script du skill dataviz) ; % toujours écrits en texte.
+- **Tableau de bord, tout le monde** : nouvelle carte « Sondages à compléter ».
+- **Traçabilité** : nouvelle catégorie d'historique `SURVEY` (icône `ClipboardList`) : `SURVEY_CREATED`, `SURVEY_CLOSED`, `SURVEY_REOPENED`, `SURVEY_DELETED`. Les réponses elles-mêmes ne sont pas journalisées (anonymat).
+- **Rouvrir** un sondage dont la date de clôture est passée retire cette date (sinon il resterait fermé en pratique).
+
+### 7.24 Propriétaire invisible + « Contacter Djibril » (29 sept. 2026)
+
+**Demande de l'utilisateur** : son compte SUPER_ADMIN apparaissait dans la liste des Employés de son organisation. Personne (employés, admins actuels ou futurs) ne doit jamais voir ce compte : il gère l'application « dans l'ombre ». Seuls les **admins principaux** doivent pouvoir le contacter, via un bouton « Contacter Djibril » dans les Paramètres ; il reçoit le message dans son espace SUPER_ADMIN avec l'organisation et l'admin qui l'a envoyé.
+
+- **Invisibilité** : `lib/visibility.ts > VISIBLE_USER` (`role ≠ SUPER_ADMIN`), ajouté à toute requête qui liste ou compte des utilisateurs d'une organisation : page Employés, compteurs du tableau de bord (employés actifs, nouvelles recrues, noms dans l'activité récente), Nouvelles recrues, compteurs des Départements, Historique (noms d'acteurs), exports Employés et Historique, messagerie (destinataire/interlocuteur introuvables). `PATCH /api/users/[id]` répond **404** (pas 403) sur ce compte : son existence n'est même pas révélée. `lib/notifications.ts` : `notifyRoles`/`notifyOrganization` n'envoient plus jamais rien au SUPER_ADMIN. Déjà exclu avant : sondages (7.23), équipe d'administration (7.22). **Règle pour toute future requête** : lister/compter des utilisateurs ⇒ ajouter `...VISIBLE_USER`.
+- **Support** : `components/dashboard/SupportCard.tsx` dans Paramètres (ancre `#support`), rendu **uniquement pour l'admin principal** ; routes `POST /api/support` (nouvelle demande, principal seul, max 5 nouvelles demandes/organisation/24 h), `POST /api/support/[id]/messages` (principal de l'organisation OU SUPER_ADMIN), `PATCH /api/support/[id]` (principal : `markRead` ; SUPER_ADMIN : `OPEN`/`RESOLVED`). Ajoutées à `middleware.ts`. Nom affiché aux admins : `PLATFORM_CONTACT_NAME = "Djibril"` (`lib/support.ts`) — aucune donnée du compte SUPER_ADMIN (id, courriel, nom) n'est envoyée au navigateur d'un admin.
+- **Côté propriétaire** : nouvelle entrée « Support » dans `/platform` (badge de non-lus dans `PlatformShell`), page `/platform/support` (organisation, identifiant, admin principal avec son courriel, statut) et `/platform/support/[id]` (fil, réponse, Marquer résolu / Rouvrir ; l'ouverture marque la demande comme lue). Notification en app + push au propriétaire à chaque message d'admin, et à l'admin à chaque réponse. Un nouveau message de l'admin rouvre une demande résolue.
+
+### 7.25 Notifications du propriétaire (29 sept. 2026)
+
+**Demande de l'utilisateur** : en tant que SUPER_ADMIN, recevoir des notifications avec la même sonorité que les employés, pour réagir vite, avec un badge qui affiche le nombre de notifications.
+
+- **Même mécanisme que les organisations, aucun nouveau modèle** : les messages d'assistance créaient déjà une `Notification` + un push pour le propriétaire (`lib/support.ts > notifyPlatformOwners`). Il manquait l'interface côté `/platform`.
+- **Cloche + badge** dans l'en-tête de `PlatformShell` (même rendu que le `Topbar` des organisations) et entrée « Notifications » dans le menu, avec compteur ; nombre calculé dans `app/platform/layout.tsx`.
+- **Page `/platform/notifications`** : réutilise tels quels `PushNotificationsToggle` (activation du push sur l'appareil → vraie notification système, même son que pour les employés : le son par défaut du système, voir commentaire dans `public/sw.js`) et `NotificationsList` (lu/non lu, « tout marquer comme lu », synchronisation du badge de l'icône de l'app).
+- **Badge de l'icône de l'app (PWA)** : mis à jour par `public/sw.js` à chaque push quand l'app est fermée, et resynchronisé par `PlatformShell` à chaque page de la console.
+- Ouvrir une demande (`/platform/support/[id]`) marque aussi comme lues les notifications qui pointent vers elle.
+- **Filtre `type: "SUPPORT_MESSAGE"`** sur la page et le compteur : avant 7.24, `notifyRoles()` incluait le SUPER_ADMIN, qui avait donc accumulé des centaines de notifications de sa propre organisation (signalements de test « Test Entreprise A », sondage…). Elles restent en base mais ne s'affichent plus dans la console.
+- Nouvelle catégorie `SUPPORT` (icône `LifeBuoy`) dans `lib/activity-log.ts`/`CategoryIcon.tsx`, pour l'icône des notifications `SUPPORT_MESSAGE`.
+- **À faire une fois par appareil** : `/platform/notifications` → « Activer » (le push est propre à chaque navigateur/appareil et au compte connecté ; l'abonnement du compte admin `+admin` ne compte pas pour le compte SUPER_ADMIN).
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -832,6 +896,27 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
   - **Confirmé fonctionnel de bout en bout par l'utilisateur** ("c'est bon ca marche").
 
 ---
+
+### 29 septembre 2026
+- **Équipe d'administration (7.22) et Sondages (7.23)**, à la demande explicite de l'utilisateur (décisions confirmées : promotion OU création de compte, 2 co-admins max, anonymat choisi par sondage, plusieurs questions par sondage).
+- **Migration Prisma exécutée avec succès** (`20260929065448_add_admin_team_and_surveys`) après deux blocages locaux déjà connus : P1001 (réseau, contourné) puis P1000 (mot de passe périmé dans `.env`, corrigé en recopiant la chaîne « Pooled connection » depuis la console Neon — le projet Neon s'appelle « Compagnie FocusMind », branche Production, endpoint `ep-red-haze-b4bh6pnl`). Contenu (Organization.primaryAdminId, enum SurveyStatus, modèles Survey/SurveyQuestion/SurveyOption/SurveyParticipation/SurveyAnswer, relations sur User et Organization).
+- **Sécurité** : `requireAuth()` relit rôle + statut en base à chaque requête (un compte désactivé ou un rôle retiré prend effet immédiatement) ; `PATCH /api/users/[id]` refuse désormais de toucher un compte admin.
+- Nouveaux fichiers : `lib/admins.ts`, `lib/surveys.ts`, `app/api/admins/route.ts`, `app/api/admins/[id]/route.ts`, `app/api/surveys/route.ts`, `app/api/surveys/[id]/route.ts`, `app/api/surveys/[id]/responses/route.ts`, `app/dashboard/surveys/page.tsx`, `app/dashboard/surveys/[id]/page.tsx`, `components/dashboard/AdminsCard.tsx`, `SurveyManager.tsx`, `SurveyAnswerForm.tsx`, `SurveyResultsView.tsx`.
+- Fichiers modifiés : `prisma/schema.prisma`, `lib/session-guard.ts`, `lib/activity-log.ts`, `app/dashboard/layout.tsx`, `app/dashboard/page.tsx`, `app/dashboard/settings/page.tsx`, `app/api/users/[id]/route.ts`, `app/api/auth/register/route.ts` (le créateur devient admin principal), `components/dashboard/EmployeesTable.tsx`, `CategoryIcon.tsx`, `nav-items.ts`, `middleware.ts` (`/api/admins`, `/api/surveys`).
+- Vérification : compilation TypeScript isolée (sans `node_modules`, registre npm inaccessible depuis l'environnement de travail) — aucune erreur de syntaxe, uniquement le bruit d'environnement connu (modules introuvables, `any` implicites). **Non testé en conditions réelles** au moment de la rédaction : à valider par l'utilisateur après la migration.
+
+### 29 septembre 2026 (suite)
+- Co-admins et sondages **testés et validés par l'utilisateur** en local.
+- **Propriétaire invisible + support privé** (voir 7.24), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_platform_support`.
+- Nouveaux fichiers : `lib/visibility.ts`, `lib/support.ts`, `app/api/support/route.ts`, `app/api/support/[id]/route.ts`, `app/api/support/[id]/messages/route.ts`, `components/dashboard/SupportCard.tsx`, `app/platform/support/page.tsx`, `app/platform/support/[id]/page.tsx`, `components/platform/PlatformSupportThread.tsx`.
+- Fichiers modifiés : `prisma/schema.prisma`, `lib/notifications.ts`, `middleware.ts`, `app/dashboard/{page,employees/page,new-hires/page,departments/page,activity/page,settings/page}.tsx`, `app/api/exports/{employees,activity}/route.ts`, `app/api/messages/route.ts`, `app/api/messages/[counterpartId]/route.ts`, `app/api/users/[id]/route.ts`, `app/platform/layout.tsx`, `components/platform/PlatformShell.tsx`.
+- Vérification : compilation TypeScript isolée, bruit d'environnement seulement ; non testé en conditions réelles au moment de la rédaction.
+
+### 29 septembre 2026 (suite 2)
+- Propriétaire invisible + support **testés et validés par l'utilisateur**.
+- **Notifications du propriétaire** (7.25) : aucune migration. Nouveau fichier `app/platform/notifications/page.tsx` ; modifiés `components/platform/PlatformShell.tsx`, `app/platform/layout.tsx`, `app/platform/support/[id]/page.tsx`, `lib/activity-log.ts`, `components/dashboard/CategoryIcon.tsx`.
+
+- **Nettoyage des données de test** : nouveau script one-off `scripts/delete-test-reports.ts` (`npx tsx scripts/delete-test-reports.ts <identifiant-entreprise>` pour l'aperçu, `--confirm` pour supprimer). Supprime uniquement les signalements intitulés exactement « Test Entreprise A » (≈292, créés en masse le 27 sept. 2026 dans l'organisation Mindmate Compagny) + leurs notifications `REPORT_CREATED` et lignes d'historique. Tous les autres signalements sont conservés.
 
 ## 14. Refonte esthétique (en cours)
 

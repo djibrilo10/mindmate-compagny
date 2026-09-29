@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, handleAuthError, ForbiddenError } from "@/lib/session-guard";
 import { notifyUser } from "@/lib/notifications";
 import type { Role } from "@prisma/client";
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
     // étape 3 : le destinataire doit appartenir à la même organisation.
     const receiver = await prisma.user.findFirst({
-      where: { id: receiverId, organizationId: ctx.organizationId },
+      where: { id: receiverId, organizationId: ctx.organizationId, ...VISIBLE_USER },
       select: { id: true },
     });
     if (!receiver) {

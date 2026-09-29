@@ -5,6 +5,12 @@ import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { generateInviteCode } from "@/lib/invite-code";
 import { InviteCodeCard } from "@/components/dashboard/InviteCodeCard";
 import { LogoUploadCard } from "@/components/dashboard/LogoUploadCard";
+import { AdminsCard } from "@/components/dashboard/AdminsCard";
+import { SurveyManager } from "@/components/dashboard/SurveyManager";
+import { SupportCard } from "@/components/dashboard/SupportCard";
+import { PLATFORM_BRAND, PLATFORM_CONTACT_NAME } from "@/lib/support";
+import { MAX_CO_ADMINS, getPrimaryAdminId } from "@/lib/admins";
+import { eligibleRespondentsWhere, isSurveyOpen } from "@/lib/surveys";
 
 const ADMIN_ROLES = ["ORG_ADMIN", "SUPER_ADMIN"];
 
@@ -47,6 +53,101 @@ export default async function SettingsPage() {
     }
   }
 
+  // Équipe d'administration (voir AUDIT.md 7.22) et sondages (7.23).
+  const primaryAdminId = await getPrimaryAdminId(ctx.organizationId);
+  const isPrimary = primaryAdminId === ctx.userId;
+  const [admins, candidates, surveys, eligible] = await Promise.all([
+    prisma.user.findMany({
+      where: { organizationId: ctx.organizationId, role: "ORG_ADMIN" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, firstName: true, lastName: true, email: true, status: true },
+    }),
+    // Candidats à la promotion : seulement utile à l'admin principal.
+    isPrimary
+      ? prisma.user.findMany({
+          where: {
+            organizationId: ctx.organizationId,
+            status: "ACTIVE",
+            role: { in: ["EMPLOYEE", "MANAGER"] },
+          },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+          select: { id: true, firstName: true, lastName: true, email: true },
+        })
+      : Promise.resolve([]),
+    prisma.survey.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        isAnonymous: true,
+        status: true,
+        closesAt: true,
+        createdAt: true,
+        _count: { select: { questions: true, participations: true } },
+      },
+    }),
+    prisma.user.count({ where: eligibleRespondentsWhere(ctx.organizationId) }),
+  ]);
+
+  // Demandes d'assistance (7.24) : admin principal seulement. Les messages
+  // du propriétaire sont signés PLATFORM_CONTACT_NAME ; aucune donnée de son
+  // compte (id, nom réel, courriel) n'est envoyée au navigateur.
+  const supportTickets = isPrimary
+    ? await prisma.supportTicket.findMany({
+        where: { organizationId: ctx.organizationId },
+        orderBy: { lastMessageAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          subject: true,
+          status: true,
+          unreadByAuthor: true,
+          lastMessageAt: true,
+          messages: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              fromPlatform: true,
+              content: true,
+              createdAt: true,
+              sender: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      })
+    : [];
+  const supportRows = supportTickets.map((t) => ({
+    id: t.id,
+    subject: t.subject,
+    status: t.status,
+    unread: t.unreadByAuthor,
+    lastMessageAt: t.lastMessageAt.toISOString(),
+    messages: t.messages.map((m) => ({
+      id: m.id,
+      fromPlatform: m.fromPlatform,
+      senderName: m.fromPlatform ? PLATFORM_CONTACT_NAME : `${m.sender.firstName} ${m.sender.lastName}`,
+      content: m.content,
+      createdAt: m.createdAt.toISOString(),
+    })),
+  }));
+
+  // L'admin principal toujours en tête de liste.
+  const adminRows = admins
+    .map((a) => ({ ...a, isPrimary: a.id === primaryAdminId }))
+    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+
+  const surveyRows = surveys.map((s) => ({
+    id: s.id,
+    title: s.title,
+    isAnonymous: s.isAnonymous,
+    isOpen: isSurveyOpen(s),
+    closesAt: s.closesAt ? s.closesAt.toISOString() : null,
+    createdAt: s.createdAt.toISOString(),
+    questionCount: s._count.questions,
+    respondents: s._count.participations,
+  }));
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3 animate-fade-in-up">
@@ -58,7 +159,7 @@ export default async function SettingsPage() {
             Paramètres
           </h1>
           <p className="mt-0.5 text-sm text-[#5B6478]">
-            Personnalise l&apos;espace de {organization.name} et gère l&apos;accès de tes employés.
+            Personnalise l&apos;espace de {organization.name}, gère l&apos;accès de tes employés, ton équipe d&apos;administration et tes sondages.
           </p>
         </div>
       </div>
@@ -74,6 +175,29 @@ export default async function SettingsPage() {
         <div className="animate-fade-in-up stagger-2">
           <InviteCodeCard initialCode={inviteCode ?? ""} />
         </div>
+
+        {ctx.role === "ORG_ADMIN" && (
+          <div className="animate-fade-in-up stagger-3">
+            <AdminsCard
+              admins={adminRows}
+              candidates={candidates}
+              isPrimary={isPrimary}
+              maxCoAdmins={MAX_CO_ADMINS}
+            />
+          </div>
+        )}
+
+        {isPrimary && (
+          <div id="support" className="animate-fade-in-up stagger-5 scroll-mt-20">
+            <SupportCard tickets={supportRows} contactName={PLATFORM_CONTACT_NAME} brand={PLATFORM_BRAND} />
+          </div>
+        )}
+
+        {ctx.role === "ORG_ADMIN" && (
+          <div id="sondages" className="animate-fade-in-up stagger-4 scroll-mt-20">
+            <SurveyManager surveys={surveyRows} eligible={eligible} />
+          </div>
+        )}
       </div>
     </div>
   );

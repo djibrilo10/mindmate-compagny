@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     redirect("/platform");
   }
 
-  const [organization, unreadNotifications] = await Promise.all([
+  const [organization, unreadNotifications, dbUser] = await Promise.all([
     user.organizationId
       ? prisma.organization.findUnique({
           where: { id: user.organizationId },
@@ -48,7 +48,17 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     user.id
       ? prisma.notification.count({ where: { userId: user.id, isRead: false } })
       : 0,
+    user.id
+      ? prisma.user.findUnique({ where: { id: user.id }, select: { role: true, status: true } })
+      : null,
   ]);
+
+  // Compte désactivé depuis la connexion (ex. co-admin désactivé par l'admin
+  // principal, voir AUDIT.md 7.22) : accès coupé tout de suite, comme dans
+  // lib/session-guard.ts.
+  if (!dbUser || dbUser.status !== "ACTIVE") {
+    redirect("/login");
+  }
 
   // Organisation suspendue par le SUPER_ADMIN (non-paiement, etc.) : on
   // coupe l'accès ici plutôt que d'attendre l'expiration du token JWT
@@ -59,7 +69,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   const userLabel = user.name || user.email || "Mon compte";
   const organizationName = organization?.name || "Votre organisation";
-  const role = user.role || "EMPLOYEE";
+  // Rôle lu en base (pas dans le token) : un employé promu co-admin voit
+  // tout de suite les menus admin, un co-admin retiré les perd tout de suite.
+  const role = dbUser.role;
 
   return (
     <div className={`${fraunces.variable} ${inter.variable} font-[family-name:var(--font-body)]`}>
