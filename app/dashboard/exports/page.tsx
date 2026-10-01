@@ -95,13 +95,15 @@ export default async function ExportsPage() {
           pdfHref="/api/exports/absences?format=pdf"
           delay={2}
         />
-        <ExportCard
-          title="Signalements"
-          description="Historique des signalements — les signalements anonymes le restent dans l'export."
-          csvHref="/api/exports/reports?format=csv"
-          pdfHref="/api/exports/reports?format=pdf"
-          delay={3}
-        />
+        {isStrictAdmin && (
+          <ExportCard
+            title="Signalements"
+            description="Historique des signalements — les signalements anonymes le restent dans l'export."
+            csvHref="/api/exports/reports?format=csv"
+            pdfHref="/api/exports/reports?format=pdf"
+            delay={3}
+          />
+        )}
         {isStrictAdmin && (
           <ExportCard
             title="Historique d'activité"

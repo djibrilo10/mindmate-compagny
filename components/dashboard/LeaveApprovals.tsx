@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, AlertTriangle, Check, Loader2, X } from "lucide-react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { formatDays, formatLeaveDates } from "@/lib/leave-format";
+import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 
 // Congés > À approuver (voir AUDIT.md 7.30) : admins (toute l'entreprise) et
 // gérants (leur département). Refus = note obligatoire.
@@ -12,7 +13,7 @@ import { formatDays, formatLeaveDates } from "@/lib/leave-format";
 export type PendingLeaveRow = {
   id: string;
   name: string;
-  department: string | null;
+  department: { name: string; color: string } | null;
   typeLabel: string;
   color: string;
   startDate: string;
@@ -73,7 +74,7 @@ export function LeaveApprovals({ rows }: { rows: PendingLeaveRow[] }) {
             <div className="min-w-0">
               <p className="text-sm font-medium text-[#1C2438]">
                 {r.name}
-                {r.department && <span className="font-normal text-[#9AA1B2]"> · {r.department}</span>}
+                {r.department && <DepartmentBadge name={r.department.name} color={r.department.color} className="ml-2" />}
               </p>
               <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-[#1C2438]">
                 <span className="inline-flex items-center gap-1.5">

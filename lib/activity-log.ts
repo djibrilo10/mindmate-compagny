@@ -59,6 +59,13 @@ export type AuditAction =
   | "ORGANIZATION_PRIVACY_UPDATED"
   | "ORGANIZATION_PRIVACY_PURGE"
   | "ORGANIZATION_LOCALE_UPDATED"
+  | "DEPARTMENT_CREATED"
+  | "DEPARTMENT_UPDATED"
+  | "DEPARTMENT_DELETED"
+  | "DEPARTMENT_MANAGER_ADDED"
+  | "DEPARTMENT_MANAGER_REMOVED"
+  | "USER_DEPARTMENT_CHANGED"
+  | "USER_DEPARTMENT_CHOSEN"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -74,6 +81,7 @@ export type ActivityCategory =
   | "SURVEY"
   | "SUPPORT"
   | "DEPARTURE"
+  | "DEPARTMENT"
   | "ORGANIZATION";
 
 export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
@@ -88,6 +96,7 @@ export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   SURVEY: "Sondages",
   SUPPORT: "Assistance",
   DEPARTURE: "Départs",
+  DEPARTMENT: "Départements",
   ORGANIZATION: "Organisation",
 };
 
@@ -143,6 +152,13 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   ORGANIZATION_PRIVACY_UPDATED: "a modifié les réglages de confidentialité",
   ORGANIZATION_PRIVACY_PURGE: "a supprimé les données arrivées au bout de leur durée de conservation",
   ORGANIZATION_LOCALE_UPDATED: "a changé la langue par défaut de l'organisation",
+  DEPARTMENT_CREATED: "a créé un département",
+  DEPARTMENT_UPDATED: "a modifié un département",
+  DEPARTMENT_DELETED: "a supprimé un département",
+  DEPARTMENT_MANAGER_ADDED: "a nommé un responsable de département",
+  DEPARTMENT_MANAGER_REMOVED: "a retiré un responsable de département",
+  USER_DEPARTMENT_CHANGED: "a changé le département d'employés",
+  USER_DEPARTMENT_CHOSEN: "a choisi son département",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };
@@ -247,6 +263,30 @@ export function actionDetail(action: string, metadata: unknown): string | null {
     case "DEPARTURE_REOPENED": {
       const name = typeof data?.name === "string" ? data.name : null;
       return name;
+    }
+    case "DEPARTMENT_CREATED":
+    case "DEPARTMENT_UPDATED":
+    case "DEPARTMENT_DELETED": {
+      const name = typeof data?.name === "string" ? data.name : null;
+      const movedTo = typeof data?.movedTo === "string" ? data.movedTo : null;
+      return name ? `${name}${movedTo ? ` → ${movedTo}` : ""}` : null;
+    }
+    case "DEPARTMENT_MANAGER_ADDED":
+    case "DEPARTMENT_MANAGER_REMOVED": {
+      const name = typeof data?.name === "string" ? data.name : null;
+      const dept = typeof data?.department === "string" ? data.department : null;
+      return name && dept ? `${name} · ${dept}` : name;
+    }
+    case "USER_DEPARTMENT_CHANGED": {
+      const dept = typeof data?.department === "string" ? data.department : null;
+      const name = typeof data?.name === "string" ? data.name : null;
+      const count = typeof data?.count === "number" ? data.count : null;
+      if (!dept) return null;
+      return name ? `${name} → ${dept}` : `${count ?? ""} → ${dept}`;
+    }
+    case "USER_DEPARTMENT_CHOSEN": {
+      const dept = typeof data?.department === "string" ? data.department : null;
+      return dept;
     }
     case "ORGANIZATION_PRIVACY_UPDATED": {
       const months = typeof data?.months === "number" ? data.months : null;

@@ -26,6 +26,7 @@ import { getSurveyResults, isSurveyOpen, type SurveyResults } from "@/lib/survey
 import { getPrimaryAdminId } from "@/lib/admins";
 import { getI18n } from "@/lib/i18n/server";
 import { approverScope } from "@/lib/leave";
+import { managedByWhere } from "@/lib/departments";
 
 // ------------------------------------------------------------
 // Tableau de bord (Phase 4) — vue d'ensemble chiffrée.
@@ -175,18 +176,38 @@ export default async function DashboardPage() {
 
   // Cartes réservées à ORG_ADMIN/MANAGER/SUPER_ADMIN (même accès que les
   // pages Signalements et Absences elles-mêmes).
+  // Signalements : admins seulement depuis 7.34 (un signalement peut viser un responsable).
   let pendingReports = 0;
   let pendingAbsencesOrg = 0;
+  let absentToday = 0;
   if (isManagement) {
-    [pendingReports, pendingAbsencesOrg] = await Promise.all([
-      prisma.report.count({
-        where: { organizationId: ctx.organizationId, status: { in: ["NEW", "SEEN", "IN_PROGRESS"] } },
-      }),
+    const todayUtc = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    // Absents aujourd'hui : toute l'entreprise (admin) ou l'équipe du responsable.
+    const team = isStrictAdmin ? { organizationId: ctx.organizationId } : { organizationId: ctx.organizationId, ...managedByWhere(ctx.userId) };
+    [pendingReports, pendingAbsencesOrg, absentToday] = await Promise.all([
+      isStrictAdmin
+        ? prisma.report.count({
+            where: { organizationId: ctx.organizationId, status: { in: ["NEW", "SEEN", "IN_PROGRESS"] } },
+          })
+        : Promise.resolve(0),
       // Congés à approuver : seulement ceux que CETTE personne peut traiter (7.30).
       (() => {
         const scope = approverScope(ctx);
         return scope ? prisma.absenceRequest.count({ where: { AND: [scope, { status: "PENDING" }] } }) : Promise.resolve(0);
       })(),
+      prisma.absenceRequest
+        .findMany({
+          where: {
+            organizationId: ctx.organizationId,
+            status: "APPROVED",
+            startDate: { lte: todayUtc },
+            endDate: { gte: todayUtc },
+            user: { ...team, status: "ACTIVE" },
+          },
+          select: { userId: true },
+          distinct: ["userId"],
+        })
+        .then((rows) => rows.length),
     ]);
   }
 
@@ -339,7 +360,7 @@ export default async function DashboardPage() {
           href="/dashboard/surveys"
           delay={0.24}
         />
-        {isManagement && (
+        {isStrictAdmin && (
           <StatCard
             icon={Flag}
             tint="red"
@@ -357,6 +378,16 @@ export default async function DashboardPage() {
             value={pendingAbsencesOrg}
             href="/dashboard/absences?tab=approvals"
             delay={0.3}
+          />
+        )}
+        {isManagement && (
+          <StatCard
+            icon={Users}
+            tint="blue"
+            label={isStrictAdmin ? t("dashboard.cards.absentToday") : t("dashboard.cards.absentTodayTeam")}
+            value={absentToday}
+            href="/dashboard/absences?tab=calendar"
+            delay={0.32}
           />
         )}
         {isStrictAdmin && (
@@ -458,6 +489,7 @@ export default async function DashboardPage() {
               {t("dashboard.toHandle")}
             </h2>
             <ul className="space-y-1">
+              {isStrictAdmin && (
               <li>
                 <Link
                   href="/dashboard/reports"
@@ -470,6 +502,7 @@ export default async function DashboardPage() {
                   <span className="font-semibold text-[#1C2438]">{pendingReports}</span>
                 </Link>
               </li>
+              )}
               <li>
                 <Link
                   href="/dashboard/absences?tab=approvals"

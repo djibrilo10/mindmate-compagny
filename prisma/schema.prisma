@@ -155,13 +155,32 @@ model Department {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
+  color          String   @default("#3F6FB0") // couleur du badge à côté du nom (AUDIT.md 7.34)
   createdAt      DateTime @default(now())
 
-  users User[]
+  users    User[]
+  managers DepartmentManager[]
 
   @@unique([organizationId, name]) // pas deux départements du même nom dans la même entreprise
   @@index([organizationId])
   @@map("departments")
+}
+
+// Responsable(s) d'un département (AUDIT.md 7.34) : nommés par l'admin
+// principal ; rôle MANAGER tant qu'ils gèrent au moins un département.
+// Un responsable n'a pas besoin d'être membre du département qu'il gère.
+model DepartmentManager {
+  organizationId String
+  departmentId   String
+  department     Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+
+  @@id([departmentId, userId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("department_managers")
 }
 
 // ------------------------------------------------------------
@@ -183,6 +202,7 @@ model User {
   avatarUrl      String?
   hireDate       DateTime?    @default(now()) // utile pour "nouvelles recrues"
   locale         String?      // "fr" | "en" choisi par la personne (null = langue par défaut de l'entreprise, AUDIT.md 7.29)
+  departmentConfirmedAt DateTime? // département choisi par la personne (inscription ou fenêtre unique à la connexion, AUDIT.md 7.34)
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -198,6 +218,7 @@ model User {
   filesUploaded        FileUpload[]      @relation("FileUploader")
   notifications        Notification[]
   leaveAdjustments     LeaveBalanceAdjustment[]
+  managedDepartments   DepartmentManager[]
   pushSubscriptions    PushSubscription[]
   surveysCreated       Survey[]              @relation("SurveyAuthor")
   surveyParticipations SurveyParticipation[]

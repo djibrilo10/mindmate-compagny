@@ -44,7 +44,8 @@ export async function POST(request: Request) {
     });
 
     // Prévenir les admins/gérants qu'un nouveau signalement attend leur attention.
-    await notifyRoles(ctx.organizationId, ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"], {
+    // Admins seulement (AUDIT.md 7.34) : un signalement peut viser un responsable.
+    await notifyRoles(ctx.organizationId, ["ORG_ADMIN"], {
       type: "REPORT_CREATED",
       title: "Nouveau signalement",
       body: title.trim(),
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     const ctx = await requireAuth();
-    requireRole(ctx, ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"]); // étape 2 : contrôle du rôle
+    requireRole(ctx, ["ORG_ADMIN", "SUPER_ADMIN"]); // étape 2 : admins seulement (7.34 : plus les responsables)
 
     const reports = await prisma.report.findMany({
       where: { organizationId: ctx.organizationId }, // étape 3 : filtre tenant obligatoire

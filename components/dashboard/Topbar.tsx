@@ -5,11 +5,13 @@ import { Bell, Menu } from "lucide-react";
 import { SignOutButton } from "./SignOutButton";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { DepartmentBadge } from "./DepartmentBadge";
 
 type TopbarProps = {
   organizationName: string;
   userLabel: string;
   unreadNotifications: number;
+  department: { name: string; color: string } | null;
   onToggleSidebar: () => void;
 };
 
@@ -20,7 +22,7 @@ function initialsFrom(label: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function Topbar({ organizationName, userLabel, unreadNotifications, onToggleSidebar }: TopbarProps) {
+export function Topbar({ organizationName, userLabel, unreadNotifications, department, onToggleSidebar }: TopbarProps) {
   const { t } = useI18n();
   return (
     <header className="flex items-center justify-between border-b border-[#E2E4E9] bg-white/90 px-4 py-3 backdrop-blur-sm sm:px-8">
@@ -60,6 +62,7 @@ export function Topbar({ organizationName, userLabel, unreadNotifications, onTog
             {initialsFrom(userLabel)}
           </span>
           <span className="text-sm text-[#5B6478]">{userLabel}</span>
+          {department && <DepartmentBadge name={department.name} color={department.color} className="hidden md:inline-flex" />}
         </div>
         <SignOutButton />
       </div>

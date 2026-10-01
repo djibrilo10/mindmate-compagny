@@ -17,7 +17,7 @@ export async function GET(
     // étape 3 : l'autre personne doit appartenir à la même organisation.
     const counterpart = await prisma.user.findFirst({
       where: { id: counterpartId, organizationId: ctx.organizationId, ...VISIBLE_USER },
-      select: { id: true, firstName: true, lastName: true, role: true },
+      select: { id: true, firstName: true, lastName: true, role: true, department: { select: { name: true, color: true } } },
     });
     if (!counterpart) {
       return Response.json({ error: "Conversation introuvable" }, { status: 404 });

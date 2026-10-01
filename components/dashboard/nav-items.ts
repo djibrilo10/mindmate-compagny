@@ -33,7 +33,8 @@ export const navItems: {
 }[] = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "nav.notifications", href: "/dashboard/notifications", icon: Bell },
-  { labelKey: "nav.employees", href: "/dashboard/employees", icon: Users },
+  // Employés : admins (tout le monde) et responsables (leurs départements) — AUDIT.md 7.34.
+  { labelKey: "nav.employees", href: "/dashboard/employees", icon: Users, managementOnly: true },
   { labelKey: "nav.newHires", href: "/dashboard/new-hires", icon: UserPlus },
   { labelKey: "nav.departments", href: "/dashboard/departments", icon: Building2 },
   { labelKey: "nav.reports", href: "/dashboard/reports", icon: Flag },

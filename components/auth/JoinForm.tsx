@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { joinSchema } from "@/lib/validations/auth";
@@ -15,7 +16,7 @@ type Values = {
   password: string;
 };
 
-type Errors = Partial<Record<keyof Values | "form", string>>;
+type Errors = Partial<Record<keyof Values | "form" | "department", string>>;
 
 const initialValues: Values = {
   inviteCode: "",
@@ -31,6 +32,36 @@ export function JoinForm() {
   const [values, setValues] = useState<Values>(initialValues);
   const [errors, setErrors] = useState<Errors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Départements proposés par l'admin (AUDIT.md 7.34), chargés dès que le
+  // code d'invitation est complet.
+  const [org, setOrg] = useState<{ name: string; departments: { id: string; name: string; color: string }[] } | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [departmentId, setDepartmentId] = useState("");
+
+  useEffect(() => {
+    const code = values.inviteCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    setOrg(null);
+    setDepartmentId("");
+    if (code.length !== 8) return;
+    const controller = new AbortController();
+    setOrgLoading(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/auth/join/departments?code=${encodeURIComponent(code)}`, { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setOrg({ name: data.organizationName, departments: data.departments ?? [] });
+          if (data.departments?.length === 1) setDepartmentId(data.departments[0].id);
+        })
+        .catch(() => {})
+        .finally(() => setOrgLoading(false));
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [values.inviteCode]);
+  const mustChooseDepartment = (org?.departments.length ?? 0) > 1;
 
   function handleChange(field: keyof Values) {
     return (e: ChangeEvent<HTMLInputElement>) => {
@@ -53,12 +84,17 @@ export function JoinForm() {
       return;
     }
 
+    if (mustChooseDepartment && !departmentId) {
+      setErrors({ department: t("departments.errors.chooseOne") });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/auth/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ ...parsed.data, departmentId: departmentId || undefined }),
       });
 
       const data = await res.json().catch(() => null);
@@ -104,6 +140,37 @@ export function JoinForm() {
         placeholder="XK7P-2QRT"
         autoComplete="off"
       />
+      {orgLoading && <Loader2 className="-mt-3 h-4 w-4 animate-spin text-[#9AA3B5]" aria-hidden />}
+      {org && (
+        <p className="-mt-3 flex items-center gap-1.5 text-sm text-[#2F6F5E]">
+          <CheckCircle2 className="h-4 w-4" /> {org.name}
+        </p>
+      )}
+      {org && mustChooseDepartment && (
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-[#1C2438]">{t("departments.join.label")}</span>
+          <select
+            value={departmentId}
+            onChange={(e) => setDepartmentId(e.target.value)}
+            className={`w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-[#1C2438] outline-none focus:border-[#2F6F5E] focus:ring-4 focus:ring-[#2F6F5E]/12 ${
+              errors.department ? "border-[#C2542C]" : "border-[#DADEE5]"
+            }`}
+          >
+            <option value="">{t("departments.join.placeholder")}</option>
+            {org.departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-[#5B6478]">{t("departments.join.hint")}</span>
+          {errors.department && (
+            <span className="text-xs text-[#C2542C]" role="alert">
+              {errors.department}
+            </span>
+          )}
+        </label>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <FormField
           label={t("auth.fields.firstName")}

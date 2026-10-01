@@ -11,6 +11,8 @@ import { SupportCard } from "@/components/dashboard/SupportCard";
 import { PrivacyCard } from "@/components/dashboard/PrivacyCard";
 import { LanguageCard } from "@/components/dashboard/LanguageCard";
 import { LeaveTypesCard } from "@/components/dashboard/LeaveTypesCard";
+import { DepartmentsCard } from "@/components/dashboard/DepartmentsCard";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { getLeaveTypes } from "@/lib/leave";
 import { leaveTypeLabel } from "@/lib/leave-format";
 import { getI18n } from "@/lib/i18n/server";
@@ -172,6 +174,30 @@ export default async function SettingsPage() {
   const { t } = await getI18n();
   // Types de congés (7.30) : admins seulement.
   const leaveTypes = ctx.role === "ORG_ADMIN" ? await getLeaveTypes(ctx.organizationId) : [];
+  // Départements et responsables (7.34) : visibles par les admins, modifiables par le principal.
+  const [departmentRows, peopleRows] =
+    ctx.role === "ORG_ADMIN"
+      ? await Promise.all([
+          prisma.department.findMany({
+            where: { organizationId: ctx.organizationId },
+            orderBy: { name: "asc" },
+            select: {
+              id: true,
+              name: true,
+              color: true,
+              _count: { select: { users: { where: { ...VISIBLE_USER, status: "ACTIVE" } } } },
+              managers: { select: { user: { select: { id: true, firstName: true, lastName: true } } } },
+            },
+          }),
+          isPrimary
+            ? prisma.user.findMany({
+                where: { organizationId: ctx.organizationId, status: "ACTIVE", role: { in: ["EMPLOYEE", "MANAGER"] } },
+                select: { id: true, firstName: true, lastName: true },
+                orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+              })
+            : Promise.resolve([] as { id: string; firstName: string; lastName: string }[]),
+        ])
+      : [[], []];
 
   return (
     <div>
@@ -227,6 +253,22 @@ export default async function SettingsPage() {
               officerEmail={organization.privacyOfficerEmail ?? ""}
               defaultOfficerName={defaultOfficerName}
               lastPurgeAt={organization.lastPrivacyPurgeAt?.toISOString() ?? null}
+            />
+          </div>
+        )}
+
+        {ctx.role === "ORG_ADMIN" && (
+          <div id="departements" className="animate-fade-in-up stagger-3 scroll-mt-20">
+            <DepartmentsCard
+              isPrimary={isPrimary}
+              departments={departmentRows.map((d) => ({
+                id: d.id,
+                name: d.name,
+                color: d.color,
+                memberCount: d._count.users,
+                managers: d.managers.map((m) => ({ id: m.user.id, name: `${m.user.firstName} ${m.user.lastName}` })),
+              }))}
+              people={peopleRows.map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}` }))}
             />
           </div>
         )}

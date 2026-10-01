@@ -2,9 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { toCsv } from "@/lib/csv";
 import { renderTablePdf } from "@/lib/pdf";
-import type { Role } from "@prisma/client";
 
-const MANAGEMENT_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
 const STATUS_LABELS: Record<string, string> = {
   NEW: "Nouveau",
   SEEN: "Vu",
@@ -32,7 +30,7 @@ const PDF_COLUMNS = [
 export async function GET(request: Request) {
   try {
     const ctx = await requireAuth();
-    requireRole(ctx, MANAGEMENT_ROLES);
+    requireRole(ctx, ["ORG_ADMIN", "SUPER_ADMIN"]); // signalements : admins seulement (AUDIT.md 7.34)
 
     const format = new URL(request.url).searchParams.get("format") === "pdf" ? "pdf" : "csv";
 

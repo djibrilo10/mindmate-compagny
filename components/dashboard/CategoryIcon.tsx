@@ -9,6 +9,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  Network,
   Star,
   User,
   type LucideIcon,
@@ -31,6 +32,7 @@ const CATEGORY_ICON_COMPONENTS: Record<ActivityCategory, LucideIcon> = {
   SURVEY: ClipboardList,
   SUPPORT: LifeBuoy,
   DEPARTURE: DoorOpen,
+  DEPARTMENT: Network,
   ORGANIZATION: Building2,
 };
 

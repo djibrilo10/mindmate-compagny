@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
       const generalDepartment = await tx.department.create({
         data: {
-          name: "Général",
+          name: locale === "en" ? "General" : "Général",
           organizationId: organization.id,
         },
       });
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
           email,
           passwordHash,
           role: "ORG_ADMIN",
+          departmentConfirmedAt: new Date(),
           organizationId: organization.id,
           departmentId: generalDepartment.id,
         },

@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { joinSchema } from "@/lib/validations/auth";
 import { normalizeInviteCode } from "@/lib/invite-code";
-import { notifyRoles } from "@/lib/notifications";
+import { notifyUsersLocalized } from "@/lib/notifications";
+import { departmentManagerIds } from "@/lib/departments";
 import { cookies } from "next/headers";
 import { getI18n } from "@/lib/i18n/server";
 import { LOCALE_COOKIE, isLocale } from "@/lib/i18n/config";
@@ -65,13 +66,20 @@ export async function POST(request: Request) {
 
   const passwordHash = await hashPassword(password);
 
-  // Département par défaut : on rattache au département "Général" créé à
-  // l'inscription de l'entreprise, s'il existe encore. Sinon l'employé
-  // reste sans département (assignable ensuite depuis la page Employés) —
-  // ce n'est jamais bloquant pour la création du compte.
-  const generalDepartment = await prisma.department.findUnique({
-    where: { organizationId_name: { organizationId: organization.id, name: "Général" } },
+  // Département CHOISI par l'employé parmi ceux créés par l'admin principal
+  // (AUDIT.md 7.34). Un seul département dans l'entreprise : choisi d'office.
+  // Plusieurs : le choix est obligatoire.
+  const departments = await prisma.department.findMany({
+    where: { organizationId: organization.id },
+    select: { id: true, name: true },
   });
+  const chosenDepartment =
+    departments.length === 1
+      ? departments[0]
+      : departments.find((d) => d.id === body?.departmentId) ?? null;
+  if (departments.length > 1 && !chosenDepartment) {
+    return NextResponse.json({ error: t("departments.errors.chooseOne") }, { status: 400 });
+  }
 
   // Langue CHOISIE sur la page d'inscription (bouton FR/EN) : gardée sur le
   // compte. Sans choix explicite, le compte suit la langue de l'entreprise.
@@ -82,7 +90,8 @@ export async function POST(request: Request) {
     user = await prisma.user.create({
       data: {
         organizationId: organization.id,
-        departmentId: generalDepartment?.id ?? null,
+        departmentId: chosenDepartment?.id ?? null,
+        departmentConfirmedAt: chosenDepartment ? new Date() : null,
         firstName,
         lastName,
         email: normalizedEmail,
@@ -109,14 +118,21 @@ export async function POST(request: Request) {
     },
   });
 
-  // Prévenir les admins/gérants qu'un nouvel employé vient de s'inscrire
-  // lui-même — même pattern que les autres événements notifiés (7.15).
-  await notifyRoles(organization.id, ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"], {
-    type: "USER_JOINED",
-    title: "Nouvel employé",
-    body: `${firstName} ${lastName} a rejoint l'organisation via le code d'invitation.`,
-    link: "/dashboard/employees",
+  // Prévenir les admins + les responsables du département choisi (7.34),
+  // chacun dans sa langue.
+  const admins = await prisma.user.findMany({
+    where: { organizationId: organization.id, status: "ACTIVE", role: "ORG_ADMIN" },
+    select: { id: true },
   });
+  const managers = await departmentManagerIds(chosenDepartment?.id);
+  await notifyUsersLocalized(organization.id, [...admins.map((a) => a.id), ...managers], (tt) => ({
+    type: "USER_JOINED",
+    title: tt("departments.notif.newEmployeeTitle"),
+    body: chosenDepartment
+      ? tt("departments.notif.newEmployeeBodyDept", { name: `${firstName} ${lastName}`, department: chosenDepartment.name })
+      : tt("departments.notif.newEmployeeBody", { name: `${firstName} ${lastName}` }),
+    link: "/dashboard/employees",
+  }));
 
   // Le client a besoin du slug pour se connecter tout de suite après
   // (signIn("credentials", ...) exige organizationSlug, voir JoinForm.tsx).

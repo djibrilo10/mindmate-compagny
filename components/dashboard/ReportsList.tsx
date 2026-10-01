@@ -1,5 +1,7 @@
 "use client";
 
+import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
+
 import { useState } from "react";
 import { CircleDot, Clock3, Eye, Flag } from "lucide-react";
 
@@ -12,7 +14,8 @@ type Report = {
   status: ReportStatus;
   isAnonymous: boolean;
   createdAt: string;
-  submitter: { firstName: string; lastName: string } | null;
+  // Département affiché seulement pour un signalement NON anonyme (AUDIT.md 7.34).
+  submitter: { firstName: string; lastName: string; department?: { name: string; color: string } | null } | null;
 };
 
 const STATUS_LABELS: Record<ReportStatus, string> = {
@@ -81,7 +84,18 @@ export function ReportsList({ initialReports }: { initialReports: Report[] }) {
                   {report.isAnonymous
                     ? "Anonyme"
                     : report.submitter
-                      ? `${report.submitter.firstName} ${report.submitter.lastName}`
+                      ? (
+                          <>
+                            {report.submitter.firstName} {report.submitter.lastName}
+                            {report.submitter.department && (
+                              <DepartmentBadge
+                                name={report.submitter.department.name}
+                                color={report.submitter.department.color}
+                                className="ml-1.5"
+                              />
+                            )}
+                          </>
+                        )
                       : "—"}
                   {" · "}
                   {new Date(report.createdAt).toLocaleDateString("fr-CA")}

@@ -3,17 +3,24 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, MessageSquare, Send } from "lucide-react";
+import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 
 type Role = "SUPER_ADMIN" | "ORG_ADMIN" | "MANAGER" | "EMPLOYEE";
 
 const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "Super admin",
   ORG_ADMIN: "Admin",
-  MANAGER: "Gérant",
+  MANAGER: "Responsable",
   EMPLOYEE: "Employé",
 };
 
-type Counterpart = { id: string; firstName: string; lastName: string; role: Role };
+type Counterpart = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  department?: { name: string; color: string } | null; // badge (AUDIT.md 7.34)
+};
 
 type ThreadSummary = {
   counterpart: Counterpart;
@@ -208,6 +215,13 @@ export function MessagesShell({
                         <span className="ml-1.5 text-xs font-normal text-[#9AA1B2]">
                           {ROLE_LABELS[thread.counterpart.role]}
                         </span>
+                        {thread.counterpart.department && (
+                          <DepartmentBadge
+                            name={thread.counterpart.department.name}
+                            color={thread.counterpart.department.color}
+                            className="ml-1.5"
+                          />
+                        )}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-[#5B6478]">
                         {thread.lastMessage.fromMe ? "Toi : " : ""}
@@ -262,6 +276,13 @@ export function MessagesShell({
                   <span className="ml-1.5 text-xs font-normal text-[#9AA1B2]">
                     {ROLE_LABELS[selectedCounterpart.role]}
                   </span>
+                )}
+                {selectedCounterpart?.department && (
+                  <DepartmentBadge
+                    name={selectedCounterpart.department.name}
+                    color={selectedCounterpart.department.color}
+                    className="ml-1.5"
+                  />
                 )}
               </p>
             </div>

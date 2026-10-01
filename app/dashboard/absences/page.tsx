@@ -20,6 +20,7 @@ import {
   companyLeavesFor,
   fullClosedDays,
 } from "@/lib/leave";
+import { managedDepartmentIds } from "@/lib/departments";
 import { formatDays, formatLeaveDates, leaveTypeLabel, LEAVE_STATUS_STYLES as STATUS_STYLES } from "@/lib/leave-format";
 import { AbsenceForm } from "@/components/dashboard/AbsenceForm";
 import { AbsencesList, type MyLeaveRow } from "@/components/dashboard/AbsencesList";
@@ -80,6 +81,8 @@ export default async function AbsencesPage({
 
   // Compteur affiché sur l'onglet « À approuver ».
   const scope = approverScope(ctx);
+  // Départements gérés par un responsable (7.34) : pour l'onglet À approuver et le calendrier.
+  const managedIds = new Set(ctx.role === "MANAGER" ? await managedDepartmentIds(ctx.userId) : []);
   const pendingCount = scope ? await prisma.absenceRequest.count({ where: { AND: [scope, { status: "PENDING" }] } }) : 0;
 
   let content: ReactNode = null;
@@ -178,7 +181,7 @@ export default async function AbsencesPage({
   }
 
   if (tab === "approvals") {
-    if (!scope) {
+    if (!scope || (ctx.role === "MANAGER" && managedIds.size === 0)) {
       content = <p className="rounded-xl border border-dashed border-[#E2E4E9] bg-white px-6 py-10 text-center text-sm text-[#5B6478]">{t("leave.approvals.noDepartment")}</p>;
     } else {
       const [pending, recent] = await Promise.all([
@@ -187,7 +190,7 @@ export default async function AbsencesPage({
           orderBy: { startDate: "asc" },
           include: {
             leaveType: true,
-            user: { select: { id: true, firstName: true, lastName: true, departmentId: true, department: { select: { name: true } } } },
+            user: { select: { id: true, firstName: true, lastName: true, departmentId: true, department: { select: { name: true, color: true } } } },
           },
         }),
         prisma.absenceRequest.findMany({
@@ -212,7 +215,7 @@ export default async function AbsencesPage({
           return {
             id: p.id,
             name: `${p.user.firstName} ${p.user.lastName}`,
-            department: p.user.department?.name ?? null,
+            department: p.user.department ?? null,
             typeLabel: label(p.leaveType),
             color: colorOf(p.leaveTypeId),
             startDate: p.startDate.toISOString(),
@@ -266,7 +269,7 @@ export default async function AbsencesPage({
 
     const people = await prisma.user.findMany({
       where: calendarPeopleWhere(ctx),
-      select: { id: true, firstName: true, lastName: true, departmentId: true },
+      select: { id: true, firstName: true, lastName: true, departmentId: true, department: { select: { name: true, color: true } } },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
     const absences = await prisma.absenceRequest.findMany({
@@ -281,7 +284,7 @@ export default async function AbsencesPage({
     });
     // Le type n'est visible que par la personne et ses approbateurs.
     const canSeeType = (person: { id: string; departmentId: string | null }) =>
-      person.id === ctx.userId || isAdmin || (ctx.role === "MANAGER" && !!ctx.departmentId && person.departmentId === ctx.departmentId);
+      person.id === ctx.userId || isAdmin || (!!person.departmentId && managedIds.has(person.departmentId));
 
     type Cell = { color: string; pending: boolean; half: boolean; title: string };
     const rows = people
@@ -399,7 +402,15 @@ export default async function AbsencesPage({
                 {rows.map(({ person, cells }) => (
                   <tr key={person.id} className="border-t border-[#E2E4E9]">
                     <th scope="row" className="sticky left-0 z-10 truncate bg-white px-3 py-1.5 text-left font-medium text-[#1C2438]">
-                      {person.firstName} {person.lastName}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: person.department?.color ?? "#B7BECC" }}
+                          title={person.department?.name ?? ""}
+                          aria-hidden
+                        />
+                        {person.firstName} {person.lastName}
+                      </span>
                     </th>
                     {cells.map((cell, i) => {
                       const date = new Date(Date.UTC(y, m, i + 1));

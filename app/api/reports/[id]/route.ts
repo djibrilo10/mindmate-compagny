@@ -17,7 +17,7 @@ export async function PATCH(
 ) {
   try {
     const ctx = await requireAuth(); // étape 1
-    requireRole(ctx, ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"]); // étape 2
+    requireRole(ctx, ["ORG_ADMIN", "SUPER_ADMIN"]); // étape 2 : admins seulement (AUDIT.md 7.34)
 
     const { id } = await params;
     const body = await request.json();

@@ -6,7 +6,9 @@ import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { ReportForm } from "@/components/dashboard/ReportForm";
 import { ReportsList } from "@/components/dashboard/ReportsList";
 
-const CAN_VIEW_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
+// Admins seulement (AUDIT.md 7.34) : un signalement peut viser un responsable,
+// qui ne doit donc jamais pouvoir le lire.
+const CAN_VIEW_ROLES: Role[] = ["ORG_ADMIN", "SUPER_ADMIN"];
 
 export default async function ReportsPage() {
   let ctx;
@@ -24,7 +26,7 @@ export default async function ReportsPage() {
         where: { organizationId: ctx.organizationId },
         orderBy: { createdAt: "desc" },
         include: {
-          submitter: { select: { firstName: true, lastName: true } },
+          submitter: { select: { firstName: true, lastName: true, department: { select: { name: true, color: true } } } },
         },
       })
     : [];
@@ -54,7 +56,7 @@ export default async function ReportsPage() {
           <p className="mt-0.5 text-sm text-[#5B6478]">
             {canViewAll
               ? "Signale un problème ou consulte les signalements de ton organisation."
-              : "Signale un problème à ton gérant ou à l'admin — anonymement si tu le souhaites."}
+              : "Signale un problème à l'administration — anonymement si tu le souhaites."}
           </p>
         </div>
       </div>

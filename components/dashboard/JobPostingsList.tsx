@@ -20,7 +20,7 @@ type ApplicationStatus = "RECEIVED" | "IN_REVIEW" | "ACCEPTED" | "REJECTED";
 const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "Super admin",
   ORG_ADMIN: "Admin",
-  MANAGER: "Gérant",
+  MANAGER: "Responsable",
   EMPLOYEE: "Employé",
 };
 

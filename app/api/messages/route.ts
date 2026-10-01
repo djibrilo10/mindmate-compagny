@@ -1,15 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { VISIBLE_USER } from "@/lib/visibility";
+import { managedByWhere } from "@/lib/departments";
 import { requireAuth, handleAuthError, ForbiddenError } from "@/lib/session-guard";
 import { notifyUser } from "@/lib/notifications";
-import type { Role } from "@prisma/client";
 
-// L'admin/gérant peut écrire à n'importe quel employé de son organisation
+// L'admin peut écrire à n'importe quel employé ; le responsable, aux membres de ses départements (7.34)
 // pour démarrer une conversation. Un employé, lui, ne peut que RÉPONDRE à
 // une conversation déjà commencée par un membre de l'administration (voir
 // le commentaire "communication ciblée admin <-> employé" sur le modèle
 // Message dans schema.prisma).
-const MANAGEMENT_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
 
 // POST /api/messages -> envoie un message privé à un utilisateur précis
 export async function POST(request: Request) {
@@ -38,7 +37,15 @@ export async function POST(request: Request) {
       return Response.json({ error: "Destinataire introuvable" }, { status: 404 });
     }
 
-    if (!MANAGEMENT_ROLES.includes(ctx.role)) {
+    // Responsable (AUDIT.md 7.34) : peut COMMENCER une conversation seulement
+    // avec un membre des départements qu'il gère ; sinon, comme un employé,
+    // il ne peut que répondre.
+    const canStartWithReceiver =
+      ctx.role === "ORG_ADMIN" ||
+      ctx.role === "SUPER_ADMIN" ||
+      (ctx.role === "MANAGER" &&
+        (await prisma.user.count({ where: { id: receiverId, ...managedByWhere(ctx.userId) } })) > 0);
+    if (!canStartWithReceiver) {
       // étape 2 (pour un rôle non-admin) : la conversation doit avoir été
       // commencée par ce destinataire, sinon un employé pourrait écrire à
       // n'importe qui dans l'organisation.

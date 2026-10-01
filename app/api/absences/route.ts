@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // Approbateurs : les admins + le(s) gérant(s) du département de la personne.
+    // Approbateurs : les admins + le(s) responsable(s) du département de la personne.
     const me = await prisma.user.findUnique({
       where: { id: ctx.userId },
       select: { firstName: true, lastName: true, departmentId: true },
@@ -94,9 +94,10 @@ export async function POST(request: Request) {
         organizationId: ctx.organizationId,
         status: "ACTIVE",
         id: { not: ctx.userId },
+        // Responsables du département de la personne (7.34).
         OR: [
           { role: "ORG_ADMIN" },
-          ...(me?.departmentId ? [{ role: "MANAGER" as const, departmentId: me.departmentId }] : []),
+          ...(me?.departmentId ? [{ managedDepartments: { some: { departmentId: me.departmentId } } }] : []),
         ],
       },
       select: { id: true },

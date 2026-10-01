@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getI18n } from "@/lib/i18n/server";
+import { getDepartments, needsDepartmentChoice } from "@/lib/departments";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -50,7 +51,16 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       ? prisma.notification.count({ where: { userId: user.id, isRead: false } })
       : 0,
     user.id
-      ? prisma.user.findUnique({ where: { id: user.id }, select: { role: true, status: true } })
+      ? prisma.user.findUnique({
+          where: { id: user.id },
+          select: {
+            role: true,
+            status: true,
+            organizationId: true,
+            departmentConfirmedAt: true,
+            department: { select: { name: true, color: true } },
+          },
+        })
       : null,
   ]);
 
@@ -75,6 +85,12 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // tout de suite les menus admin, un co-admin retiré les perd tout de suite.
   const role = dbUser.role;
 
+  // Départements (7.34) : badge à côté du nom + fenêtre unique « Choisis ton
+  // département » pour les comptes créés avant que l'admin crée les équipes.
+  const departmentPrompt = (await needsDepartmentChoice(dbUser))
+    ? { organizationName, departments: await getDepartments(dbUser.organizationId) }
+    : null;
+
   return (
     <div className={`${fraunces.variable} ${inter.variable} font-[family-name:var(--font-body)]`}>
       <DashboardShell
@@ -82,6 +98,8 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         userLabel={userLabel}
         role={role}
         unreadNotifications={unreadNotifications}
+        department={dbUser.department}
+        departmentPrompt={departmentPrompt}
       >
         {children}
       </DashboardShell>

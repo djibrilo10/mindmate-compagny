@@ -3,18 +3,18 @@ import { PartyPopper, Sparkles, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
+import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 
-// Visible par TOUS les employés de l'organisation (comme la liste des
-// employés) : c'est pensé comme un mur d'accueil, pas un outil réservé à
-// l'admin — les mêmes infos (nom, rôle, département) sont déjà visibles
-// sur la page Employés pour tout le monde.
+// Visible par TOUS les employés de l'organisation : c'est pensé comme un mur
+// d'accueil (nom, rôle, badge du département), pas un annuaire — la page
+// Employés (courriels) est réservée aux admins et responsables (AUDIT.md 7.34).
 const NEW_BADGE_WINDOW_DAYS = 30;
 const MAX_HIRES_SHOWN = 20;
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super admin",
   ORG_ADMIN: "Admin",
-  MANAGER: "Gérant",
+  MANAGER: "Responsable",
   EMPLOYEE: "Employé",
 };
 
@@ -60,7 +60,7 @@ export default async function NewHiresPage() {
       lastName: true,
       role: true,
       hireDate: true,
-      department: { select: { name: true } },
+      department: { select: { name: true, color: true } },
     },
     orderBy: { hireDate: "desc" },
     take: MAX_HIRES_SHOWN,
@@ -73,7 +73,7 @@ export default async function NewHiresPage() {
       firstName: hire.firstName,
       lastName: hire.lastName,
       role: hire.role,
-      department: hire.department?.name ?? null,
+      department: hire.department ?? null,
       hireDateLabel: (hire.hireDate as Date).toLocaleDateString("fr-CA", {
         year: "numeric",
         month: "long",
@@ -130,7 +130,9 @@ export default async function NewHiresPage() {
                 </div>
                 <p className="mt-0.5 text-xs text-[#5B6478]">
                   {ROLE_LABELS[hire.role] ?? hire.role}
-                  {hire.department ? ` · ${hire.department}` : ""}
+                  {hire.department && (
+                    <DepartmentBadge name={hire.department.name} color={hire.department.color} className="ml-1.5" />
+                  )}
                 </p>
                 <p className="mt-1 text-xs text-[#9AA1B2]">
                   {hire.relativeLabel} · {hire.hireDateLabel}

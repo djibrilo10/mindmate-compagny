@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/session-guard";
 import { VISIBLE_USER } from "@/lib/visibility";
+import { managedByWhere } from "@/lib/departments";
 
 // ------------------------------------------------------------
 // Congés et absences (voir AUDIT.md 7.30).
@@ -158,11 +159,12 @@ export function isLeaveManager(ctx: AuthContext) {
 export function approverScope(ctx: AuthContext): Prisma.AbsenceRequestWhereInput | null {
   if (ctx.role === "ORG_ADMIN") return { organizationId: ctx.organizationId };
   if (ctx.role === "MANAGER") {
-    if (!ctx.departmentId) return null;
+    // Responsable (7.34) : membres des départements qu'il GÈRE (pas forcément
+    // le sien), jamais ses propres demandes.
     return {
       organizationId: ctx.organizationId,
       userId: { not: ctx.userId },
-      user: { departmentId: ctx.departmentId },
+      user: managedByWhere(ctx.userId),
     };
   }
   return null;
@@ -172,8 +174,11 @@ export function approverScope(ctx: AuthContext): Prisma.AbsenceRequestWhereInput
 export function calendarPeopleWhere(ctx: AuthContext): Prisma.UserWhereInput {
   const base: Prisma.UserWhereInput = { organizationId: ctx.organizationId, status: "ACTIVE", ...VISIBLE_USER };
   if (ctx.role === "ORG_ADMIN") return base;
-  // Gérant et employé : leur département (ou seulement eux-mêmes s'ils n'en ont pas).
-  return ctx.departmentId ? { ...base, departmentId: ctx.departmentId } : { ...base, id: ctx.userId };
+  // Employé : son département (ou lui seul). Responsable : en plus, les
+  // départements qu'il gère (7.34).
+  const own: Prisma.UserWhereInput = ctx.departmentId ? { departmentId: ctx.departmentId } : { id: ctx.userId };
+  if (ctx.role === "MANAGER") return { ...base, OR: [own, managedByWhere(ctx.userId)] };
+  return { ...base, ...own };
 }
 
 // ---------------- Soldes ----------------

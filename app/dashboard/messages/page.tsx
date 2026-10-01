@@ -4,6 +4,7 @@ import { MessageSquare } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { MessagesShell } from "@/components/dashboard/MessagesShell";
+import { managedByWhere } from "@/lib/departments";
 
 const MANAGEMENT_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
 
@@ -29,13 +30,19 @@ export default async function MessagesPage() {
     },
     orderBy: { createdAt: "desc" },
     include: {
-      sender: { select: { id: true, firstName: true, lastName: true, role: true } },
-      receiver: { select: { id: true, firstName: true, lastName: true, role: true } },
+      sender: { select: { id: true, firstName: true, lastName: true, role: true, department: { select: { name: true, color: true } } } },
+      receiver: { select: { id: true, firstName: true, lastName: true, role: true, department: { select: { name: true, color: true } } } },
     },
   });
 
   type ThreadSummary = {
-    counterpart: { id: string; firstName: string; lastName: string; role: Role };
+    counterpart: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      role: Role;
+      department: { name: string; color: string } | null;
+    };
     lastMessage: { content: string; createdAt: string; fromMe: boolean };
     unreadCount: number;
   };
@@ -69,11 +76,15 @@ export default async function MessagesPage() {
   // propose la liste des employés actifs de son organisation.
   const employeesForPicker = canInitiate
     ? await prisma.user.findMany({
+        // Admin : tous les employés. Responsable : seulement les membres des
+        // départements qu'il gère (AUDIT.md 7.34).
         where: {
           organizationId: ctx.organizationId,
-          role: "EMPLOYEE",
           status: "ACTIVE",
           id: { not: ctx.userId },
+          ...(ctx.role === "MANAGER"
+            ? { role: { in: ["EMPLOYEE", "MANAGER"] as Role[] }, ...managedByWhere(ctx.userId) }
+            : { role: "EMPLOYEE" as const }),
         },
         select: { id: true, firstName: true, lastName: true },
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
@@ -93,7 +104,7 @@ export default async function MessagesPage() {
           <p className="mt-0.5 text-sm text-[#5B6478]">
             {canInitiate
               ? "Écris à un employé ou continue une conversation existante."
-              : "Réponds aux messages qu'un membre de l'administration t'a envoyés."}
+              : "Réponds aux messages que l'administration ou ton responsable t'a envoyés."}
           </p>
         </div>
       </div>

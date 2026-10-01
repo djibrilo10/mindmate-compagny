@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { toCsv } from "@/lib/csv";
+import { teamMembersWhere } from "@/lib/departments";
 import { renderTablePdf } from "@/lib/pdf";
 import type { Role } from "@prisma/client";
 
@@ -9,7 +10,7 @@ const MANAGEMENT_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super admin",
   ORG_ADMIN: "Admin",
-  MANAGER: "Gérant",
+  MANAGER: "Responsable",
   EMPLOYEE: "Employé",
 };
 const STATUS_LABELS: Record<string, string> = {
@@ -42,11 +43,13 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireAuth();
     requireRole(ctx, MANAGEMENT_ROLES);
+    // Responsable : seulement les membres de ses départements (AUDIT.md 7.34).
+    const where = teamMembersWhere(ctx) ?? { organizationId: ctx.organizationId, ...VISIBLE_USER };
 
     const format = new URL(request.url).searchParams.get("format") === "pdf" ? "pdf" : "csv";
 
     const employees = await prisma.user.findMany({
-      where: { organizationId: ctx.organizationId, ...VISIBLE_USER },
+      where,
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: {
         firstName: true,
