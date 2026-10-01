@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { joinSchema } from "@/lib/validations/auth";
 import { FormField } from "@/components/auth/FormField";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Values = {
   inviteCode: string;
@@ -26,6 +27,7 @@ const initialValues: Values = {
 
 export function JoinForm() {
   const router = useRouter();
+  const { t, tx } = useI18n();
   const [values, setValues] = useState<Values>(initialValues);
   const [errors, setErrors] = useState<Errors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +47,7 @@ export function JoinForm() {
       const fieldErrors: Errors = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0] as keyof Errors;
-        fieldErrors[key] = issue.message;
+        fieldErrors[key] = tx(issue.message);
       }
       setErrors(fieldErrors);
       return;
@@ -62,7 +64,7 @@ export function JoinForm() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setErrors({ form: data?.error ?? "Une erreur est survenue. Réessayez." });
+        setErrors({ form: data?.error ? tx(data.error) : t("common.genericError") });
         return;
       }
 
@@ -85,7 +87,7 @@ export function JoinForm() {
 
       router.push("/dashboard");
     } catch {
-      setErrors({ form: "Impossible de contacter le serveur. Réessayez." });
+      setErrors({ form: t("common.serverUnreachableRetry") });
     } finally {
       setIsSubmitting(false);
     }
@@ -94,7 +96,7 @@ export function JoinForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
       <FormField
-        label="Code d'invitation"
+        label={t("auth.fields.inviteCode")}
         name="inviteCode"
         value={values.inviteCode}
         onChange={handleChange("inviteCode")}
@@ -104,7 +106,7 @@ export function JoinForm() {
       />
       <div className="grid grid-cols-2 gap-4">
         <FormField
-          label="Prénom"
+          label={t("auth.fields.firstName")}
           name="firstName"
           value={values.firstName}
           onChange={handleChange("firstName")}
@@ -113,7 +115,7 @@ export function JoinForm() {
           autoComplete="given-name"
         />
         <FormField
-          label="Nom"
+          label={t("auth.fields.lastName")}
           name="lastName"
           value={values.lastName}
           onChange={handleChange("lastName")}
@@ -123,23 +125,23 @@ export function JoinForm() {
         />
       </div>
       <FormField
-        label="Courriel"
+        label={t("auth.fields.email")}
         name="email"
         type="email"
         value={values.email}
         onChange={handleChange("email")}
         error={errors.email}
-        placeholder="alex@entreprisea.com"
+        placeholder={t("auth.placeholders.emailExample")}
         autoComplete="email"
       />
       <FormField
-        label="Mot de passe"
+        label={t("auth.fields.password")}
         name="password"
         type="password"
         value={values.password}
         onChange={handleChange("password")}
         error={errors.password}
-        placeholder="8 caractères, une majuscule, un chiffre"
+        placeholder={t("auth.placeholders.newPassword")}
         autoComplete="new-password"
       />
 
@@ -154,7 +156,7 @@ export function JoinForm() {
         disabled={isSubmitting}
         className="mt-2 rounded-md bg-[#2F6F5E] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#265A4C] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "Création en cours…" : "Rejoindre l'entreprise"}
+        {isSubmitting ? t("auth.join.submitting") : t("auth.join.submit")}
       </button>
     </form>
   );

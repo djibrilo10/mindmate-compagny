@@ -1,35 +1,38 @@
 import { z } from "zod";
 
+// Les messages sont des CLÉS de traduction (lib/i18n/messages, AUDIT.md 7.29) :
+// traduites par tx() dans les formulaires et par t() dans les routes API.
+
 export const registerSchema = z.object({
   organizationName: z
     .string()
-    .min(2, "Le nom de l'entreprise doit contenir au moins 2 caractères")
-    .max(100, "Le nom de l'entreprise est trop long"),
+    .min(2, "validation.orgNameMin")
+    .max(100, "validation.orgNameMax"),
   firstName: z
     .string()
-    .min(1, "Entrez votre prénom")
-    .max(50, "Ce prénom est trop long"),
+    .min(1, "validation.firstNameRequired")
+    .max(50, "validation.firstNameMax"),
   lastName: z
     .string()
-    .min(1, "Entrez votre nom")
-    .max(50, "Ce nom est trop long"),
-  email: z.string().trim().email("Entrez une adresse courriel valide"),
+    .min(1, "validation.lastNameRequired")
+    .max(50, "validation.lastNameMax"),
+  email: z.string().trim().email("validation.emailInvalid"),
   password: z
     .string()
-    .min(8, "Le mot de passe doit contenir au moins 8 caractères")
-    .regex(/[A-Z]/, "Ajoutez au moins une majuscule")
-    .regex(/[0-9]/, "Ajoutez au moins un chiffre"),
+    .min(8, "validation.passwordMin")
+    .regex(/[A-Z]/, "validation.passwordUppercase")
+    .regex(/[0-9]/, "validation.passwordDigit"),
 });
 
 export const loginSchema = z.object({
-  organizationSlug: z.string().min(1, "Entrez l'identifiant de votre entreprise"),
+  organizationSlug: z.string().min(1, "validation.slugRequired"),
   // .trim() avant .email() : les claviers mobiles (surtout avec l'auto-complétion
   // du domaine, ex. "@gmail.com" suggéré) ajoutent parfois un espace en fin de
   // saisie, invisible à l'œil, qui faisait échouer la validation même pour une
   // adresse par ailleurs correcte (ex. un alias "+admin@..." plus long, donc
   // plus susceptible de déclencher l'auto-complétion) — voir AUDIT.md.
-  email: z.string().trim().email("Entrez une adresse courriel valide"),
-  password: z.string().min(1, "Entrez votre mot de passe"),
+  email: z.string().trim().email("validation.emailInvalid"),
+  password: z.string().min(1, "validation.passwordRequired"),
 });
 
 // Auto-inscription d'un employé via le code d'invitation de son
@@ -38,21 +41,21 @@ export const loginSchema = z.object({
 export const joinSchema = z.object({
   inviteCode: z
     .string()
-    .min(1, "Entrez le code d'invitation fourni par votre administrateur"),
+    .min(1, "validation.inviteCodeRequired"),
   firstName: z
     .string()
-    .min(1, "Entrez votre prénom")
-    .max(50, "Ce prénom est trop long"),
+    .min(1, "validation.firstNameRequired")
+    .max(50, "validation.firstNameMax"),
   lastName: z
     .string()
-    .min(1, "Entrez votre nom")
-    .max(50, "Ce nom est trop long"),
-  email: z.string().trim().email("Entrez une adresse courriel valide"),
+    .min(1, "validation.lastNameRequired")
+    .max(50, "validation.lastNameMax"),
+  email: z.string().trim().email("validation.emailInvalid"),
   password: z
     .string()
-    .min(8, "Le mot de passe doit contenir au moins 8 caractères")
-    .regex(/[A-Z]/, "Ajoutez au moins une majuscule")
-    .regex(/[0-9]/, "Ajoutez au moins un chiffre"),
+    .min(8, "validation.passwordMin")
+    .regex(/[A-Z]/, "validation.passwordUppercase")
+    .regex(/[0-9]/, "validation.passwordDigit"),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

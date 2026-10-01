@@ -9,8 +9,10 @@ import {
   FileText,
   Flag,
   Mail,
+  ShieldAlert,
   Sparkles,
   Star,
+  TrendingDown,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -21,6 +23,9 @@ import { actionCategory, actionDetail, actionLabel } from "@/lib/activity-log";
 import { CategoryIcon } from "@/components/dashboard/CategoryIcon";
 import { SurveyResultsView } from "@/components/dashboard/SurveyResultsView";
 import { getSurveyResults, isSurveyOpen, type SurveyResults } from "@/lib/surveys";
+import { getPrimaryAdminId } from "@/lib/admins";
+import { getI18n } from "@/lib/i18n/server";
+import { approverScope } from "@/lib/leave";
 
 // ------------------------------------------------------------
 // Tableau de bord (Phase 4) — vue d'ensemble chiffrée.
@@ -79,10 +84,6 @@ function StatCard({ icon: Icon, tint = "green", label, value, href, delay = 0 }:
   );
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("fr-CA", { year: "numeric", month: "long", day: "numeric" });
-}
-
 export default async function DashboardPage() {
   let ctx;
   try {
@@ -92,6 +93,7 @@ export default async function DashboardPage() {
     throw error;
   }
 
+  const { t, formatDate, formatDateTime, formatNumber } = await getI18n();
   const isManagement = MANAGEMENT_ROLES.includes(ctx.role);
   const isStrictAdmin = STRICT_ADMIN_ROLES.includes(ctx.role);
   const thirtyDaysAgo = new Date(Date.now() - NEW_HIRE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -148,6 +150,16 @@ export default async function DashboardPage() {
   const answeredSurveyIds = new Set(mySurveyParticipations.map((p) => p.surveyId));
   const surveysToAnswer = openSurveys.filter((s) => isSurveyOpen(s) && !answeredSurveyIds.has(s.id)).length;
 
+  // Départs des 12 derniers mois (Employee Retention Intelligence, AUDIT.md 7.26).
+  let departures12m = 0;
+  if (ctx.role === "ORG_ADMIN") {
+    const since = new Date();
+    since.setMonth(since.getMonth() - 12);
+    departures12m = await prisma.departure.count({
+      where: { organizationId: ctx.organizationId, lastDay: { gte: since } },
+    });
+  }
+
   let surveyResults: SurveyResults[] = [];
   if (ctx.role === "ORG_ADMIN") {
     const latest = await prisma.survey.findMany({
@@ -170,7 +182,11 @@ export default async function DashboardPage() {
       prisma.report.count({
         where: { organizationId: ctx.organizationId, status: { in: ["NEW", "SEEN", "IN_PROGRESS"] } },
       }),
-      prisma.absenceRequest.count({ where: { organizationId: ctx.organizationId, status: "PENDING" } }),
+      // Congés à approuver : seulement ceux que CETTE personne peut traiter (7.30).
+      (() => {
+        const scope = approverScope(ctx);
+        return scope ? prisma.absenceRequest.count({ where: { AND: [scope, { status: "PENDING" }] } }) : Promise.resolve(0);
+      })(),
     ]);
   }
 
@@ -231,22 +247,46 @@ export default async function DashboardPage() {
     });
   }
 
+  // Confidentialité (7.28) : rappel à l'admin principal tant qu'il n'a pas
+  // choisi la durée de conservation (aucune valeur par défaut).
+  let mustChooseRetention = false;
+  if (ctx.role === "ORG_ADMIN" && (await getPrimaryAdminId(ctx.organizationId)) === ctx.userId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: { dataRetentionMonths: true },
+    });
+    mustChooseRetention = org?.dataRetentionMonths == null;
+  }
+
   return (
     <div>
       <div className="mb-6 animate-fade-in-up">
         <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1C2438]">
-          Tableau de bord
+          {t("dashboard.title")}
         </h1>
         <p className="mt-1 text-sm text-[#5B6478]">
-          Vue d&apos;ensemble de {isManagement ? "ton organisation" : "ton espace"}.
+          {isManagement ? t("dashboard.overviewOrg") : t("dashboard.overviewSelf")}
         </p>
       </div>
+
+      {mustChooseRetention && (
+        <Link
+          href="/dashboard/settings#confidentialite"
+          className="mb-6 flex items-center gap-3 rounded-xl border border-[#F0D9A8] bg-[#FDF3E3] px-4 py-3 text-sm text-[#6B5215] transition-colors hover:border-[#E0A43A] animate-fade-in-up"
+        >
+          <ShieldAlert className="h-5 w-5 shrink-0" />
+          <span className="flex-1">
+            <strong className="font-medium">{t("dashboard.privacyBanner")}</strong> {t("dashboard.privacyBannerText")}
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatCard
           icon={Users}
           tint="green"
-          label="Employés actifs"
+          label={t("dashboard.cards.activeEmployees")}
           value={activeEmployees}
           href="/dashboard/employees"
           delay={0.02}
@@ -254,7 +294,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={Sparkles}
           tint="amber"
-          label={`Nouvelles recrues (${NEW_HIRE_WINDOW_DAYS} j)`}
+          label={t("dashboard.cards.newHires", { days: NEW_HIRE_WINDOW_DAYS })}
           value={newHiresCount}
           href="/dashboard/new-hires"
           delay={0.06}
@@ -262,7 +302,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={Briefcase}
           tint="blue"
-          label="Postes ouverts"
+          label={t("dashboard.cards.openJobs")}
           value={openJobPostings}
           href="/dashboard/jobs"
           delay={0.1}
@@ -270,7 +310,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={FileText}
           tint="blue"
-          label="Documents partagés"
+          label={t("dashboard.cards.sharedDocuments")}
           value={totalDocuments}
           href="/dashboard/files"
           delay={0.14}
@@ -278,7 +318,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={Mail}
           tint="purple"
-          label="Mes messages non lus"
+          label={t("dashboard.cards.unreadMessages")}
           value={myUnreadMessages}
           href="/dashboard/messages"
           delay={0.18}
@@ -286,7 +326,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={CalendarDays}
           tint="amber"
-          label="Mes absences en attente"
+          label={t("dashboard.cards.myPendingAbsences")}
           value={myPendingAbsences}
           href="/dashboard/absences"
           delay={0.22}
@@ -294,7 +334,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={ClipboardList}
           tint="purple"
-          label="Sondages à compléter"
+          label={t("dashboard.cards.surveysToAnswer")}
           value={surveysToAnswer}
           href="/dashboard/surveys"
           delay={0.24}
@@ -303,7 +343,7 @@ export default async function DashboardPage() {
           <StatCard
             icon={Flag}
             tint="red"
-            label="Signalements à traiter"
+            label={t("dashboard.cards.reportsToHandle")}
             value={pendingReports}
             href="/dashboard/reports"
             delay={0.26}
@@ -313,9 +353,9 @@ export default async function DashboardPage() {
           <StatCard
             icon={CalendarDays}
             tint="amber"
-            label="Absences à approuver (org.)"
+            label={t("dashboard.cards.absencesToApprove")}
             value={pendingAbsencesOrg}
-            href="/dashboard/absences"
+            href="/dashboard/absences?tab=approvals"
             delay={0.3}
           />
         )}
@@ -323,7 +363,7 @@ export default async function DashboardPage() {
           <StatCard
             icon={FileText}
             tint="blue"
-            label="Candidatures reçues"
+            label={t("dashboard.cards.applications")}
             value={pendingApplications}
             href="/dashboard/jobs"
             delay={0.34}
@@ -333,10 +373,24 @@ export default async function DashboardPage() {
           <StatCard
             icon={Star}
             tint="purple"
-            label="Note moyenne des avis"
-            value={reviewsCount > 0 && reviewsAvg !== null ? `${reviewsAvg.toFixed(1)} / 5` : "—"}
+            label={t("dashboard.cards.reviewsAverage")}
+            value={
+              reviewsCount > 0 && reviewsAvg !== null
+                ? `${formatNumber(reviewsAvg, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} / 5`
+                : "—"
+            }
             href="/dashboard/reviews"
             delay={0.38}
+          />
+        )}
+        {ctx.role === "ORG_ADMIN" && (
+          <StatCard
+            icon={TrendingDown}
+            tint="red"
+            label={t("dashboard.cards.departures12m")}
+            value={departures12m}
+            href="/dashboard/retention"
+            delay={0.42}
           />
         )}
       </div>
@@ -346,20 +400,19 @@ export default async function DashboardPage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg text-[#1C2438]">
               <ClipboardList className="h-5 w-5 text-[#5B3E9C]" strokeWidth={1.9} />
-              Résultats des sondages
+              {t("dashboard.surveyResults")}
             </h2>
             <Link
               href="/dashboard/settings#sondages"
               className="group flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
             >
-              {surveyResults.length === 0 ? "Créer un sondage" : "Tous les sondages"}
+              {surveyResults.length === 0 ? t("dashboard.createSurvey") : t("dashboard.allSurveys")}
               <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
             </Link>
           </div>
           {surveyResults.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#E2E4E9] bg-white px-6 py-8 text-center text-sm text-[#5B6478]">
-              Aucun sondage pour le moment. Crée-en un dans Paramètres pour mesurer l&apos;avis de tes équipes
-              (productivité, satisfaction…) : les résultats s&apos;afficheront ici.
+              {t("dashboard.noSurveys")}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -375,18 +428,18 @@ export default async function DashboardPage() {
         <div className="animate-fade-in-up stagger-6 rounded-xl border border-[#E2E4E9] bg-white p-5 opacity-0 transition-shadow duration-200 hover:shadow-[0_8px_20px_-6px_rgba(28,36,56,0.1)]">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-[family-name:var(--font-display)] text-base text-[#1C2438]">
-              Annonces récentes
+              {t("dashboard.recentAnnouncements")}
             </h2>
             <Link
               href="/dashboard/announcements"
               className="group flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
             >
-              Voir tout
+              {t("common.seeAll")}
               <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
             </Link>
           </div>
           {recentAnnouncements.length === 0 ? (
-            <p className="text-sm text-[#9AA1B2]">Aucune annonce pour le moment.</p>
+            <p className="text-sm text-[#9AA1B2]">{t("dashboard.noAnnouncements")}</p>
           ) : (
             <ul className="space-y-3">
               {recentAnnouncements.map((a) => (
@@ -402,7 +455,7 @@ export default async function DashboardPage() {
         {isManagement ? (
           <div className="animate-fade-in-up stagger-7 rounded-xl border border-[#E2E4E9] bg-white p-5 opacity-0 transition-shadow duration-200 hover:shadow-[0_8px_20px_-6px_rgba(28,36,56,0.1)]">
             <h2 className="mb-3 font-[family-name:var(--font-display)] text-base text-[#1C2438]">
-              À traiter
+              {t("dashboard.toHandle")}
             </h2>
             <ul className="space-y-1">
               <li>
@@ -412,19 +465,19 @@ export default async function DashboardPage() {
                 >
                   <span className="flex items-center gap-2 text-[#1C2438]">
                     <Flag className="h-4 w-4 text-[#8A3B3B]" strokeWidth={1.9} />
-                    Signalements ouverts
+                    {t("dashboard.openReports")}
                   </span>
                   <span className="font-semibold text-[#1C2438]">{pendingReports}</span>
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/dashboard/absences"
+                  href="/dashboard/absences?tab=approvals"
                   className="flex items-center justify-between rounded-md px-2 py-2 text-sm transition-colors hover:bg-[#F7F8FA]"
                 >
                   <span className="flex items-center gap-2 text-[#1C2438]">
                     <CalendarDays className="h-4 w-4 text-[#8A6A1C]" strokeWidth={1.9} />
-                    Absences en attente
+                    {t("dashboard.pendingAbsences")}
                   </span>
                   <span className="font-semibold text-[#1C2438]">{pendingAbsencesOrg}</span>
                 </Link>
@@ -437,7 +490,7 @@ export default async function DashboardPage() {
                   >
                     <span className="flex items-center gap-2 text-[#1C2438]">
                       <FileText className="h-4 w-4 text-[#2A5A8A]" strokeWidth={1.9} />
-                      Candidatures reçues
+                      {t("dashboard.applications")}
                     </span>
                     <span className="font-semibold text-[#1C2438]">{pendingApplications}</span>
                   </Link>
@@ -449,18 +502,18 @@ export default async function DashboardPage() {
           <div className="animate-fade-in-up stagger-7 rounded-xl border border-[#E2E4E9] bg-white p-5 opacity-0 transition-shadow duration-200 hover:shadow-[0_8px_20px_-6px_rgba(28,36,56,0.1)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-[family-name:var(--font-display)] text-base text-[#1C2438]">
-                Postes ouverts
+                {t("dashboard.openJobs")}
               </h2>
               <Link
                 href="/dashboard/jobs"
                 className="group flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
               >
-                Voir tout
+                {t("common.seeAll")}
                 <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
               </Link>
             </div>
             {recentOpenJobs.length === 0 ? (
-              <p className="text-sm text-[#9AA1B2]">Aucun poste ouvert pour le moment.</p>
+              <p className="text-sm text-[#9AA1B2]">{t("dashboard.noOpenJobs")}</p>
             ) : (
               <ul className="space-y-3">
                 {recentOpenJobs.map((j) => (
@@ -479,18 +532,18 @@ export default async function DashboardPage() {
         <div className="animate-fade-in-up stagger-8 mt-6 rounded-xl border border-[#E2E4E9] bg-white p-5 opacity-0 transition-shadow duration-200 hover:shadow-[0_8px_20px_-6px_rgba(28,36,56,0.1)]">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-[family-name:var(--font-display)] text-base text-[#1C2438]">
-              Activité récente
+              {t("dashboard.recentActivity")}
             </h2>
             <Link
               href="/dashboard/activity"
               className="group flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
             >
-              Voir tout l&apos;historique
+              {t("dashboard.fullHistory")}
               <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
             </Link>
           </div>
           {recentActivity.length === 0 ? (
-            <p className="text-sm text-[#9AA1B2]">Aucune activité pour le moment.</p>
+            <p className="text-sm text-[#9AA1B2]">{t("dashboard.noActivity")}</p>
           ) : (
             <ul className="space-y-3">
               {recentActivity.map((entry) => (
@@ -503,12 +556,14 @@ export default async function DashboardPage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-[#1C2438]">
-                      <span className="font-medium">{entry.actorName ?? "Quelqu'un"}</span>{" "}
+                      <span className="font-medium">
+                        {entry.actorName ?? (entry.action === "ORGANIZATION_PRIVACY_PURGE" ? t("common.system") : t("common.someone"))}
+                      </span>{" "}
                       {actionLabel(entry.action)}
                       {entry.detail ? ` · ${entry.detail}` : ""}
                     </p>
                     <p className="mt-0.5 text-xs text-[#9AA1B2]">
-                      {entry.createdAt.toLocaleString("fr-CA", {
+                      {formatDateTime(entry.createdAt, {
                         year: "numeric",
                         month: "short",
                         day: "numeric",

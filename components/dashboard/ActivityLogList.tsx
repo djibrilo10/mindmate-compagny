@@ -102,7 +102,11 @@ export function ActivityLogList({ entries }: { entries: ActivityEntry[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[#1C2438]">
                   <span className="font-medium">
-                    {entry.actor ? `${entry.actor.firstName} ${entry.actor.lastName}` : "Quelqu'un"}
+                    {entry.actor
+                      ? `${entry.actor.firstName} ${entry.actor.lastName}`
+                      : entry.action === "ORGANIZATION_PRIVACY_PURGE"
+                        ? "Système"
+                        : "Quelqu'un"}
                   </span>
                   {entry.actor && (
                     <span className="ml-1 text-xs text-[#9AA1B2]">({ROLE_LABELS[entry.actor.role]})</span>

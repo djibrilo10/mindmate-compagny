@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  DoorOpen,
   Download,
   FileText,
   Flag,
@@ -13,32 +14,40 @@ import {
   MessageSquare,
   Settings,
   Star,
+  TrendingDown,
   UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
 
+import type { MessageKey } from "@/lib/i18n/translator";
+
+// Libellés = clés de traduction (FR/EN, AUDIT.md 7.29), traduites dans Sidebar.tsx.
 export const navItems: {
-  label: string;
+  labelKey: MessageKey;
   href: string;
   icon: LucideIcon;
   adminOnly?: boolean;
   managementOnly?: boolean;
+  nonAdminOnly?: boolean; // masqué pour les admins (ex. "Mon départ", voir AUDIT.md 7.26)
 }[] = [
-  { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Notifications", href: "/dashboard/notifications", icon: Bell },
-  { label: "Employés", href: "/dashboard/employees", icon: Users },
-  { label: "Nouvelles recrues", href: "/dashboard/new-hires", icon: UserPlus },
-  { label: "Départements", href: "/dashboard/departments", icon: Building2 },
-  { label: "Signalements", href: "/dashboard/reports", icon: Flag },
-  { label: "Absences", href: "/dashboard/absences", icon: CalendarDays },
-  { label: "Documents", href: "/dashboard/files", icon: FileText },
-  { label: "Annonces", href: "/dashboard/announcements", icon: Megaphone },
-  { label: "Postes ouverts", href: "/dashboard/jobs", icon: Briefcase },
-  { label: "Avis", href: "/dashboard/reviews", icon: Star },
-  { label: "Sondages", href: "/dashboard/surveys", icon: ClipboardList },
-  { label: "Messages", href: "/dashboard/messages", icon: MessageSquare },
-  { label: "Exports", href: "/dashboard/exports", icon: Download, managementOnly: true },
-  { label: "Historique", href: "/dashboard/activity", icon: History, adminOnly: true },
-  { label: "Paramètres", href: "/dashboard/settings", icon: Settings, adminOnly: true },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.notifications", href: "/dashboard/notifications", icon: Bell },
+  { labelKey: "nav.employees", href: "/dashboard/employees", icon: Users },
+  { labelKey: "nav.newHires", href: "/dashboard/new-hires", icon: UserPlus },
+  { labelKey: "nav.departments", href: "/dashboard/departments", icon: Building2 },
+  { labelKey: "nav.reports", href: "/dashboard/reports", icon: Flag },
+  { labelKey: "nav.absences", href: "/dashboard/absences", icon: CalendarDays },
+  { labelKey: "nav.files", href: "/dashboard/files", icon: FileText },
+  { labelKey: "nav.announcements", href: "/dashboard/announcements", icon: Megaphone },
+  { labelKey: "nav.jobs", href: "/dashboard/jobs", icon: Briefcase },
+  { labelKey: "nav.reviews", href: "/dashboard/reviews", icon: Star },
+  { labelKey: "nav.surveys", href: "/dashboard/surveys", icon: ClipboardList },
+  { labelKey: "nav.messages", href: "/dashboard/messages", icon: MessageSquare },
+  { labelKey: "nav.exports", href: "/dashboard/exports", icon: Download, managementOnly: true },
+  { labelKey: "nav.retention", href: "/dashboard/retention", icon: TrendingDown, adminOnly: true },
+  { labelKey: "nav.activity", href: "/dashboard/activity", icon: History, adminOnly: true },
+  { labelKey: "nav.settings", href: "/dashboard/settings", icon: Settings, adminOnly: true },
+  // En dernier, volontairement discret : annoncer son départ (AUDIT.md 7.26).
+  { labelKey: "nav.departure", href: "/dashboard/departure", icon: DoorOpen, nonAdminOnly: true },
 ];

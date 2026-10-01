@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, EyeOff, Loader2, Send, UserCheck } from "lucide-react";
+import type { PrivacyInfo } from "@/lib/privacy";
+import { PrivacyNotice } from "@/components/dashboard/PrivacyNotice";
 
 // Formulaire de réponse à un sondage (voir AUDIT.md 7.23) : un choix par
 // question, envoi unique. L'employé est clairement informé si ses réponses
@@ -14,18 +16,22 @@ export function SurveyAnswerForm({
   surveyId,
   isAnonymous,
   questions,
+  privacy,
 }: {
   surveyId: string;
   isAnonymous: boolean;
   questions: Question[];
+  privacy: PrivacyInfo;
 }) {
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState("");
+  // Sondage nominatif seulement : avis de confidentialité à accepter (Loi 25, 7.28).
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const answeredCount = questions.filter((q) => answers[q.id]).length;
-  const complete = answeredCount === questions.length;
+  const complete = answeredCount === questions.length && (isAnonymous || privacyAccepted);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -38,6 +44,7 @@ export function SurveyAnswerForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           answers: questions.map((q) => ({ questionId: q.id, optionId: answers[q.id] })),
+          privacyAccepted: isAnonymous ? undefined : privacyAccepted,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -68,6 +75,15 @@ export function SurveyAnswerForm({
           </>
         )}
       </p>
+
+      {!isAnonymous && (
+        <PrivacyNotice
+          info={privacy}
+          purpose="survey"
+          accepted={privacyAccepted}
+          onChange={setPrivacyAccepted}
+        />
+      )}
 
       {questions.map((q, qi) => (
         <fieldset key={q.id}>
@@ -113,6 +129,7 @@ export function SurveyAnswerForm({
         </button>
         <span className="text-xs text-[#9AA1B2]">
           {answeredCount} / {questions.length} question{questions.length > 1 ? "s" : ""}
+          {!isAnonymous && !privacyAccepted ? " · coche « J'ai compris »" : ""}
         </span>
         {status === "error" && (
           <span className="inline-flex items-center gap-1 text-sm text-[#8A3B3B]">

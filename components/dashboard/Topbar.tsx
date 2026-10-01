@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Bell, Menu } from "lucide-react";
 import { SignOutButton } from "./SignOutButton";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type TopbarProps = {
   organizationName: string;
@@ -19,13 +21,14 @@ function initialsFrom(label: string): string {
 }
 
 export function Topbar({ organizationName, userLabel, unreadNotifications, onToggleSidebar }: TopbarProps) {
+  const { t } = useI18n();
   return (
     <header className="flex items-center justify-between border-b border-[#E2E4E9] bg-white/90 px-4 py-3 backdrop-blur-sm sm:px-8">
       <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
           className="rounded-md p-2 text-[#1C2438] transition-colors hover:bg-[#F0F1F4] lg:hidden"
-          aria-label="Ouvrir le menu"
+          aria-label={t("shell.openMenu")}
         >
           <Menu className="h-5 w-5" strokeWidth={1.9} />
         </button>
@@ -34,10 +37,15 @@ export function Topbar({ organizationName, userLabel, unreadNotifications, onTog
         </span>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <LanguageSwitcher />
         <Link
           href="/dashboard/notifications"
-          aria-label={unreadNotifications > 0 ? `Notifications (${unreadNotifications} non lues)` : "Notifications"}
+          aria-label={
+            unreadNotifications > 0
+              ? t("shell.notificationsUnread", { count: unreadNotifications })
+              : t("shell.notifications")
+          }
           className="relative rounded-md p-2 text-[#1C2438] transition-colors hover:bg-[#F0F1F4]"
         >
           <Bell className="h-[19px] w-[19px]" strokeWidth={1.8} />

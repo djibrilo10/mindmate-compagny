@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 import type { Role } from "@prisma/client";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n/config";
+import { createTranslator, type TFunction, type Translator } from "@/lib/i18n/translator";
+import { dictionaries } from "@/lib/i18n/dictionaries";
 
 // ------------------------------------------------------------
 // Création des notifications (Phase 4). À appeler juste après l'écriture
@@ -93,4 +96,33 @@ export async function notifyOrganization(
     select: { id: true },
   });
   await notifyUsers(organizationId, recipients.map((r) => r.id), content);
+}
+
+// ------------------------------------------------------------
+// Notification dans la LANGUE de chaque destinataire (FR/EN, AUDIT.md 7.29) :
+// les textes sont enregistrés en base au moment de l'envoi, donc on les
+// rédige une fois par langue (User.locale, sinon langue de l'entreprise).
+//   await notifyUsersLocalized(orgId, ids, (t) => ({ type, title: t("..."), ... }))
+// ------------------------------------------------------------
+export async function notifyUsersLocalized(
+  organizationId: string,
+  userIds: string[],
+  build: (t: TFunction, translator: Translator) => NotifyContent
+) {
+  const ids = Array.from(new Set(userIds));
+  if (ids.length === 0) return;
+  const [users, organization] = await Promise.all([
+    prisma.user.findMany({ where: { id: { in: ids }, organizationId }, select: { id: true, locale: true } }),
+    prisma.organization.findUnique({ where: { id: organizationId }, select: { defaultLocale: true } }),
+  ]);
+  const orgLocale: Locale = isLocale(organization?.defaultLocale) ? organization.defaultLocale : DEFAULT_LOCALE;
+  const byLocale = new Map<Locale, string[]>();
+  for (const u of users) {
+    const locale = isLocale(u.locale) ? u.locale : orgLocale;
+    byLocale.set(locale, [...(byLocale.get(locale) ?? []), u.id]);
+  }
+  for (const [locale, localeIds] of byLocale) {
+    const translator = createTranslator(locale, dictionaries[locale]);
+    await notifyUsers(organizationId, localeIds, build(translator.t, translator));
+  }
 }

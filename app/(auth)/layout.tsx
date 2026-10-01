@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Fraunces, Inter } from "next/font/google";
 import { OrgIllustration } from "@/components/auth/OrgIllustration";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { getI18n } from "@/lib/i18n/server";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -9,7 +11,8 @@ const fraunces = Fraunces({
 });
 const inter = Inter({ subsets: ["latin"], variable: "--font-body" });
 
-export default function AuthLayout({ children }: { children: ReactNode }) {
+export default async function AuthLayout({ children }: { children: ReactNode }) {
+  const { t } = await getI18n();
   return (
     <div
       className={`${fraunces.variable} ${inter.variable} font-[family-name:var(--font-body)] grid min-h-screen grid-cols-1 bg-[radial-gradient(ellipse_at_top,_#FFFFFF_0%,_#F3F5F8_60%)] lg:grid-cols-[minmax(0,440px)_1fr]`}
@@ -32,7 +35,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mark-white.png" alt="" aria-hidden className="h-8 w-8 shrink-0 object-contain" />
           <span className="font-[family-name:var(--font-display)] text-xl tracking-tight">
-            Portail employé
+            {t("shell.portal")}
           </span>
         </div>
 
@@ -41,16 +44,19 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <OrgIllustration />
           </div>
           <p className="max-w-xs animate-fade-in-up stagger-4 font-[family-name:var(--font-display)] text-2xl leading-snug">
-            Une organisation, ses départements, ses employés — au même endroit.
+            {t("auth.tagline")}
           </p>
         </div>
 
         <p className="relative max-w-xs animate-fade-in-up stagger-5 text-sm text-[#9AA3B5]">
-          Signalements, absences, horaires et annonces, réunis dans un seul espace pour toute l&apos;équipe.
+          {t("auth.subtagline")}
         </p>
       </aside>
 
-      <main className="flex items-center justify-center px-6 py-14 sm:px-12">
+      <main className="relative flex items-center justify-center px-6 py-14 sm:px-12">
+        <div className="absolute right-6 top-6 sm:right-12">
+          <LanguageSwitcher />
+        </div>
         <div className="w-full max-w-sm animate-fade-in-up stagger-1">{children}</div>
       </main>
     </div>

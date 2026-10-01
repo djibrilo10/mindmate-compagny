@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Loader2, Lock, Mail, User } from "lucide-react";
 import { registerSchema } from "@/lib/validations/auth";
 import { FormField } from "@/components/auth/FormField";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Values = {
   organizationName: string;
@@ -26,6 +27,7 @@ const initialValues: Values = {
 
 export function RegisterForm() {
   const router = useRouter();
+  const { t, tx } = useI18n();
   const [values, setValues] = useState<Values>(initialValues);
   const [errors, setErrors] = useState<Errors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +47,7 @@ export function RegisterForm() {
       const fieldErrors: Errors = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0] as keyof Errors;
-        fieldErrors[key] = issue.message;
+        fieldErrors[key] = tx(issue.message);
       }
       setErrors(fieldErrors);
       return;
@@ -62,13 +64,13 @@ export function RegisterForm() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setErrors({ form: data?.error ?? "Une erreur est survenue. Réessayez." });
+        setErrors({ form: data?.error ? tx(data.error) : t("common.genericError") });
         return;
       }
 
       router.push(`/login?registered=1&slug=${encodeURIComponent(data.slug)}`);
     } catch {
-      setErrors({ form: "Impossible de contacter le serveur. Réessayez." });
+      setErrors({ form: t("common.serverUnreachableRetry") });
     } finally {
       setIsSubmitting(false);
     }
@@ -77,18 +79,18 @@ export function RegisterForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
       <FormField
-        label="Nom de l'entreprise"
+        label={t("auth.fields.organizationName")}
         name="organizationName"
         icon={Building2}
         value={values.organizationName}
         onChange={handleChange("organizationName")}
         error={errors.organizationName}
-        placeholder="Entreprise A inc."
+        placeholder={t("auth.placeholders.organizationName")}
         autoComplete="organization"
       />
       <div className="grid grid-cols-2 gap-4">
         <FormField
-          label="Prénom"
+          label={t("auth.fields.firstName")}
           name="firstName"
           icon={User}
           value={values.firstName}
@@ -98,7 +100,7 @@ export function RegisterForm() {
           autoComplete="given-name"
         />
         <FormField
-          label="Nom"
+          label={t("auth.fields.lastName")}
           name="lastName"
           value={values.lastName}
           onChange={handleChange("lastName")}
@@ -108,25 +110,25 @@ export function RegisterForm() {
         />
       </div>
       <FormField
-        label="Courriel"
+        label={t("auth.fields.email")}
         name="email"
         type="email"
         icon={Mail}
         value={values.email}
         onChange={handleChange("email")}
         error={errors.email}
-        placeholder="alex@entreprisea.com"
+        placeholder={t("auth.placeholders.emailExample")}
         autoComplete="email"
       />
       <FormField
-        label="Mot de passe"
+        label={t("auth.fields.password")}
         name="password"
         type="password"
         icon={Lock}
         value={values.password}
         onChange={handleChange("password")}
         error={errors.password}
-        placeholder="8 caractères, une majuscule, un chiffre"
+        placeholder={t("auth.placeholders.newPassword")}
         autoComplete="new-password"
       />
 
@@ -142,7 +144,7 @@ export function RegisterForm() {
         className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-4 py-2.5 text-sm font-medium text-white shadow-[0_4px_14px_-4px_rgba(47,111,94,0.5)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_-4px_rgba(47,111,94,0.6)] active:translate-y-0 active:shadow-[0_2px_8px_-2px_rgba(47,111,94,0.5)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_14px_-4px_rgba(47,111,94,0.5)]"
       >
         {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />}
-        {isSubmitting ? "Création en cours…" : "Créer l'organisation"}
+        {isSubmitting ? t("auth.register.submitting") : t("auth.register.submit")}
       </button>
     </form>
   );

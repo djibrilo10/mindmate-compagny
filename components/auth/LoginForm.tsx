@@ -6,12 +6,14 @@ import { signIn } from "next-auth/react";
 import { Building2, Loader2, Lock, Mail } from "lucide-react";
 import { loginSchema } from "@/lib/validations/auth";
 import { FormField } from "@/components/auth/FormField";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Values = { organizationSlug: string; email: string; password: string };
 type Errors = Partial<Record<keyof Values | "form", string>>;
 
 export function LoginForm() {
   const router = useRouter();
+  const { t, tx } = useI18n();
   const params = useSearchParams();
   const justRegistered = params.get("registered") === "1";
   const prefilledSlug = params.get("slug") ?? "";
@@ -39,7 +41,7 @@ export function LoginForm() {
       const fieldErrors: Errors = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0] as keyof Errors;
-        fieldErrors[key] = issue.message;
+        fieldErrors[key] = tx(issue.message);
       }
       setErrors(fieldErrors);
       return;
@@ -55,7 +57,7 @@ export function LoginForm() {
       });
 
       if (!result || result.error) {
-        setErrors({ form: "Courriel ou mot de passe incorrect." });
+        setErrors({ form: t("auth.login.badCredentials") });
         return;
       }
 
@@ -69,42 +71,40 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
       {justRegistered && (
         <p className="animate-scale-in rounded-lg bg-[#EAF3F0] px-3 py-2.5 text-sm text-[#265A4C]">
-          Organisation créée. Votre identifiant d&apos;entreprise est{" "}
-          <strong>{prefilledSlug}</strong> — gardez-le, il vous servira à
-          chaque connexion.
+          {t("auth.login.registered", { slug: prefilledSlug })}
         </p>
       )}
 
       <FormField
-        label="Identifiant de l'entreprise"
+        label={t("auth.fields.organizationSlug")}
         name="organizationSlug"
         icon={Building2}
         value={values.organizationSlug}
         onChange={handleChange("organizationSlug")}
         error={errors.organizationSlug}
-        placeholder="entreprise-a-inc"
+        placeholder={t("auth.placeholders.organizationSlug")}
         autoComplete="organization"
       />
       <FormField
-        label="Courriel"
+        label={t("auth.fields.email")}
         name="email"
         type="email"
         icon={Mail}
         value={values.email}
         onChange={handleChange("email")}
         error={errors.email}
-        placeholder="vous@entreprise.com"
+        placeholder={t("auth.placeholders.email")}
         autoComplete="email"
       />
       <FormField
-        label="Mot de passe"
+        label={t("auth.fields.password")}
         name="password"
         type="password"
         icon={Lock}
         value={values.password}
         onChange={handleChange("password")}
         error={errors.password}
-        placeholder="Votre mot de passe"
+        placeholder={t("auth.placeholders.password")}
         autoComplete="current-password"
       />
 
@@ -120,7 +120,7 @@ export function LoginForm() {
         className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-4 py-2.5 text-sm font-medium text-white shadow-[0_4px_14px_-4px_rgba(47,111,94,0.5)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_-4px_rgba(47,111,94,0.6)] active:translate-y-0 active:shadow-[0_2px_8px_-2px_rgba(47,111,94,0.5)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[0_4px_14px_-4px_rgba(47,111,94,0.5)]"
       >
         {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />}
-        {isSubmitting ? "Connexion…" : "Se connecter"}
+        {isSubmitting ? t("auth.login.submitting") : t("auth.login.submit")}
       </button>
     </form>
   );

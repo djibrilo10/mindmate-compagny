@@ -4,6 +4,9 @@ import { hashPassword } from "@/lib/password";
 import { joinSchema } from "@/lib/validations/auth";
 import { normalizeInviteCode } from "@/lib/invite-code";
 import { notifyRoles } from "@/lib/notifications";
+import { cookies } from "next/headers";
+import { getI18n } from "@/lib/i18n/server";
+import { LOCALE_COOKIE, isLocale } from "@/lib/i18n/config";
 
 // ------------------------------------------------------------
 // Miroir de /api/auth/register (voir ce fichier pour le pattern de base),
@@ -15,16 +18,17 @@ import { notifyRoles } from "@/lib/notifications";
 // ------------------------------------------------------------
 
 export async function POST(request: Request) {
+  const { t } = await getI18n();
   const body = await request.json().catch(() => null);
 
   if (!body) {
-    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+    return NextResponse.json({ error: t("errors.invalidRequest") }, { status: 400 });
   }
 
   const parsed = joinSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Données invalides." },
+      { error: parsed.error.issues[0]?.message ?? "errors.invalidData" },
       { status: 400 }
     );
   }
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
 
   if (!organization) {
     return NextResponse.json(
-      { error: "Code d'invitation invalide. Vérifiez-le auprès de votre administrateur." },
+      { error: t("errors.invalidInviteCode") },
       { status: 400 }
     );
   }
@@ -54,7 +58,7 @@ export async function POST(request: Request) {
   });
   if (existingUser) {
     return NextResponse.json(
-      { error: "Un compte existe déjà avec ce courriel dans cette entreprise." },
+      { error: t("errors.emailTakenInOrg") },
       { status: 409 }
     );
   }
@@ -69,6 +73,10 @@ export async function POST(request: Request) {
     where: { organizationId_name: { organizationId: organization.id, name: "Général" } },
   });
 
+  // Langue CHOISIE sur la page d'inscription (bouton FR/EN) : gardée sur le
+  // compte. Sans choix explicite, le compte suit la langue de l'entreprise.
+  const chosenLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
+
   let user;
   try {
     user = await prisma.user.create({
@@ -81,12 +89,13 @@ export async function POST(request: Request) {
         passwordHash,
         role: "EMPLOYEE",
         status: "ACTIVE", // actif immédiatement, pas d'approbation admin (voir AUDIT.md 7.18)
+        locale: isLocale(chosenLocale) ? chosenLocale : null,
       },
     });
   } catch (error) {
     console.error("Erreur lors de la création du compte via code d'invitation :", error);
     return NextResponse.json(
-      { error: "Impossible de créer le compte. Vérifiez le terminal du serveur pour le détail." },
+      { error: t("errors.accountCreateFailed") },
       { status: 500 }
     );
   }

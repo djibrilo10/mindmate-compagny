@@ -89,6 +89,8 @@ export const config = {
     "/api/admins/:path*",
     "/api/surveys/:path*",
     "/api/support/:path*",
+    "/api/departures/:path*",
+    "/api/leave/:path*",
     "/platform/:path*",
     "/api/platform/:path*",
     "/suspended",

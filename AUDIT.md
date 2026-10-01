@@ -76,6 +76,7 @@ Fichier `.env` à la racine (**jamais commité** — déjà dans `.gitignore` pa
 | `DATABASE_URL` | Chaîne de connexion PostgreSQL (Neon), format `postgresql://user:password@host/db?sslmode=require&channel_binding=require` |
 | `NEXTAUTH_URL` | URL de base de l'app (`http://localhost:3000` en dev) |
 | `NEXTAUTH_SECRET` | Secret utilisé par NextAuth pour signer les JWT de session — générer une valeur aléatoire forte, différente entre dev/prod |
+| `CRON_SECRET` | (Vercel, production) Secret que Vercel Cron envoie en `Authorization: Bearer …` à `/api/cron/privacy-purge` (7.28). Sans lui, la suppression automatique refuse de tourner. Valeur aléatoire d'au moins 16 caractères. |
 
 > ⚠️ Ne jamais mettre les vraies valeurs de ces variables dans ce document, dans le code commité, ou dans une conversation publique. Ce sont des secrets.
 
@@ -97,6 +98,8 @@ enum UserStatus { ACTIVE  DISABLED }
 enum OrganizationStatus { ACTIVE  SUSPENDED }
 enum SurveyStatus { OPEN  CLOSED }
 enum SupportTicketStatus { OPEN  RESOLVED }
+enum DepartureType { RESIGNATION  END_OF_CONTRACT  DISMISSAL  RETIREMENT  OTHER }
+enum DepartureStatus { PENDING_SURVEY  COMPLETED  NO_SURVEY }
 ```
 
 - `SUPER_ADMIN` : réservé au porteur du produit (vous — gère toutes les organisations clientes). Depuis le 26 sept. 2026, dispose de son propre espace `/platform` (voir 7.20), totalement séparé du dashboard des entreprises clientes. Attribué uniquement via `scripts/promote-super-admin.ts` (jamais depuis l'UI — voir 7.20).
@@ -155,6 +158,8 @@ Points importants :
 
 **`SupportTicket` / `SupportMessage`** (29 sept. 2026, voir 7.24) — canal privé admin principal → propriétaire. `SupportTicket` : `organizationId, authorId (relation "SupportTicketAuthor"), subject, status (SupportTicketStatus), unreadByPlatform, unreadByAuthor, lastMessageAt`. `SupportMessage` : `ticketId, senderId (relation "SupportMessageSender"), fromPlatform, content`.
 
+**`Departure`** (30 sept. 2026, voir 7.26) — un départ d'employé + son questionnaire de départ. `userId` (relation "DepartureEmployee"), `recordedById?` (admin, relation "DepartureRecorder" ; null = déclaré par l'employé), `type`, `status`, `lastDay`, copies `departmentId`/`hireDate` au moment du départ, puis les réponses : `primaryReason`, `secondaryReasons[]`, `details[]` (sous-causes), 6 notes `rating*` (1–5), `couldBeRetained`, `retentionLever`, `wouldRecommend`, `wouldReturn` (`YES|MAYBE|NO`), `comment`, `submittedAt`. Codes et libellés dans `lib/retention-config.ts`. Champs ajoutés le même jour (7.27) : `confirmedAt`, `confirmedById` (id texte, sans relation), `transitionAt`, `transitionLocation`, `transitionNotes`, `handoverItems` (Json : `[{ id, label, done, doneAt }]`), `closedAt`.
+
 ### 4.3 Schéma complet (référence)
 
 Le fichier `prisma/schema.prisma` fait ~360 lignes. Il contient tous les modèles ci-dessus, avec pour chacun les index (`@@index([organizationId])` quasi systématique) qui gardent les requêtes filtrées-par-tenant rapides. En cas de reconstruction, le fichier réel sur le projet fait foi — cette section en est le résumé explicatif, pas une copie ligne à ligne à resynchroniser manuellement.
@@ -182,6 +187,25 @@ Le fichier `prisma/schema.prisma` fait ~360 lignes. Il contient tous les modèle
                                                     (7.22/7.23) ; EXÉCUTÉE avec succès le 29 sept. 2026.
 20260929______add_platform_support               — SupportTicketStatus + SupportTicket/SupportMessage (7.24) ; à exécuter avec
                                                     `npx prisma migrate dev --name add_platform_support`.
+20260930095932_add_departures                    — DepartureType/DepartureStatus + Departure (7.26) ; EXÉCUTÉE le 30 sept. 2026.
+20261001043220_add_privacy                       — champs de fin d'emploi/transition sur Departure (7.27, jamais migrés
+                                                    séparément) + confidentialité Loi 25 (7.28) : Organization.dataRetentionMonths/
+                                                    privacyOfficerName/privacyOfficerEmail/lastPrivacyPurgeAt,
+                                                    Departure.privacyNoticeAt, SurveyParticipation.privacyNoticeAt ;
+                                                    EXÉCUTÉE le 1er oct. 2026.
+20261001050000_retention_chosen_by_admin         — ÉCRITE À LA MAIN : dataRetentionMonths devient nullable sans défaut
+                                                    (l'admin principal choisit) + remet à NULL les 36 mois posés
+                                                    automatiquement (sauf organisation ayant déjà enregistré un choix) ;
+                                                    à appliquer avec `npx prisma migrate dev`.
+202610________add_locale                         — FR/EN (7.29) : User.locale (null = langue de l'entreprise) +
+                                                    Organization.defaultLocale (défaut "fr") ; à exécuter avec
+                                                    `npx prisma migrate dev --name add_locale`.
+202610________add_leave                          — Congés (7.30) : AbsenceStatus.CANCELLED, LeaveType, LeaveBalanceAdjustment,
+                                                    AbsenceRequest.leaveTypeId/halfDay/days/decidedById/decidedAt/decisionNote
+                                                    (reason devient facultatif), Organization.leaveYearStartMonth ;
+                                                    à exécuter avec `npx prisma migrate dev --name add_leave`.
+202610________add_company_leave                  — CompanyLeave (7.31) ; à exécuter avec
+                                                    `npx prisma migrate dev --name add_company_leave`.
 ```
 
 Point important : **JobPosting, JobApplication, Message et Review existaient déjà dans le schéma initial** (`init`). Construire ces fonctionnalités plus tard n'a donc demandé AUCUNE migration — seulement du code applicatif (routes API + pages). Ne pas supposer qu'une nouvelle fonctionnalité = nouvelle migration : vérifier d'abord si le modèle existe déjà dans le schéma.
@@ -492,6 +516,7 @@ Pour chaque fonctionnalité : qui y a accès, quelles routes API, quelles règle
 | Logo de l'organisation (affichage) | ✅ lecture (barre latérale) | ✅ lecture | ✅ lecture + édition (Paramètres) |
 | Équipe d'administration (Paramètres) | ❌ | ❌ | ✅ voir l'équipe ; **admin principal seul** : ajouter/désactiver/réactiver/remplacer/retirer les co-admins (max 2) |
 | Contacter le propriétaire (« Contacter Djibril ») | ❌ | ❌ | **admin principal seul** (co-admins exclus) |
+| Retention Intelligence (départs) | ✅ « Mon départ » : annoncer sa démission / remplir son questionnaire | ✅ idem | ✅ analyses, enregistrer/annuler un départ, réponses nominatives (admins seulement, pas « Mon départ ») |
 | Sondages | ✅ répondre (1×/sondage) | ✅ répondre | ✅ + créer/fermer/rouvrir/supprimer (Paramètres) + résultats (tableau de bord + `/dashboard/surveys/[id]`) |
 
 Ce tableau décrit les droits **à l'intérieur d'une organisation cliente**. L'espace `/platform` (7.20) est différent par nature : il n'appartient à aucune organisation cliente, seul le `SUPER_ADMIN` (vous) y a accès, et il voit TOUTES les organisations à la fois — voir 7.20 plutôt que ce tableau.
@@ -756,6 +781,90 @@ Jusqu'ici l'app ne tournait qu'en local (`npm run dev` / `npm run start` sur `lo
 - Nouvelle catégorie `SUPPORT` (icône `LifeBuoy`) dans `lib/activity-log.ts`/`CategoryIcon.tsx`, pour l'icône des notifications `SUPPORT_MESSAGE`.
 - **À faire une fois par appareil** : `/platform/notifications` → « Activer » (le push est propre à chaque navigateur/appareil et au compte connecté ; l'abonnement du compte admin `+admin` ne compte pas pour le compte SUPER_ADMIN).
 
+### 7.26 Employee Retention Intelligence — départs (30 sept. 2026)
+
+**Demande de l'utilisateur** : comprendre pourquoi les employés quittent l'entreprise. À chaque départ, un questionnaire ; puis analyses et tendances (ex. « 12 derniers mois : 38 % manque d'évolution, 31 % management… » et « le département Marketing présente un taux de départ supérieur aux autres »). Décisions confirmées : départ déclenché **par l'employé OU par un admin** ; réponses **nominatives** ; **questionnaire fixe** ; module réservé aux **admins**.
+
+- **Questionnaire** (`lib/retention-config.ts`, sans accès BDD, partagé client/serveur) : raison principale (8 choix), raisons secondaires, **sous-causes précises** par raison (ex. Rémunération → salaire sous le marché / pas d'augmentation / avantages / meilleure offre), 6 notes sur 5 (gérant, évolution, charge, rémunération, ambiance, reconnaissance), « aurait-on pu vous retenir ? » + levier (promotion, augmentation, changement de gérant, flexibilité…), recommandation, retour possible, commentaire. Validation zod (`surveyAnswersSchema`) qui nettoie les incohérences (sous-cause d'une raison non cochée, etc.). **Ne jamais renommer un code** (stocké en base), seulement son libellé.
+- **Flux** : (1) l'employé ou gérant va dans « Mon départ » (`/dashboard/departure`, dernier élément du menu, masqué aux admins) et annonce sa démission avec le questionnaire → `POST /api/departures/me` ; (2) un admin clique « Enregistrer un départ » sur `/dashboard/retention` (employé, type, dernier jour, questionnaire oui/non — décoché par défaut pour un licenciement) → `POST /api/departures` → l'employé est notifié et remplit le questionnaire dans « Mon départ ». Annulation : `DELETE /api/departures/[id]` (réponses supprimées). Un seul départ « en cours » par employé (depuis sa date d'embauche, `lib/departures.ts`). Le compte n'est **pas** désactivé automatiquement : l'admin le fait depuis Employés, après la réponse. Les admins ne peuvent pas être « partants » (retirer d'abord leurs droits, 7.22).
+- **Analyses** (`lib/retention.ts > getRetentionAnalytics`, période 3/6/12 mois) : départs, taux de départ (≈ départs ÷ (actifs + partis)), % démissions, ancienneté moyenne et % de départs avant 1 an, raisons (part des questionnaires qui **citent** la raison — le total dépasse 100 %, comme dans l'exemple de l'utilisateur — + part en raison principale + 3 premières sous-causes), **taux par département** avec repère de la moyenne et alerte « au-dessus de la moyenne » (≥ 2 départs et ≥ 1,3× le taux global), départs par mois, notes moyennes (point faible), leviers de rétention, % recommandation/retour, **phrases d'analyse automatiques** (département anormal, première cause, point le plus mal noté, part « retenable », départs précoces, faible taux de réponse).
+- **Pages** : `/dashboard/retention` (admins), `/dashboard/retention/[id]` (réponses nominatives d'un départ + annuler), `/dashboard/departure` (employé). Carte « Départs (12 mois) » sur le tableau de bord des admins. Entrée « Rétention » (admins) et « Mon départ » (non-admins) dans le menu (`nonAdminOnly`, nouveau drapeau de `nav-items.ts`, géré dans `Sidebar.tsx`).
+- **Traçabilité** : catégorie d'historique `DEPARTURE` (icône `DoorOpen`) : `DEPARTURE_RECORDED`, `DEPARTURE_DECLARED`, `DEPARTURE_SURVEY_COMPLETED`, `DEPARTURE_CANCELLED`. Notifications : admins (annonce/questionnaire rempli), employé (questionnaire à remplir).
+
+### 7.27 Fin d'emploi & rendez-vous de transition (30 sept. 2026)
+
+**Demande de l'utilisateur** : sur la fiche d'un départ, l'admin confirme la fin d'emploi et peut organiser un rendez-vous de transition avec l'employé (remise des dossiers, des clés, accès informatiques…). Décisions confirmées : **admin principal uniquement** (co-admins en lecture seule) ; **aucune désactivation automatique** du compte (l'admin le fait depuis Employés).
+
+- **Route** : `PATCH /api/departures/[id]` (admin principal, `requirePrimaryAdmin`) avec `action` = `confirm` | `schedule` (date/heure ISO, lieu, consignes, liste de remise ; vaut aussi confirmation) | `checklist` (cocher/décocher — seul l'état change, pas les libellés) | `close` | `reopen`. Liste de remise par défaut `DEFAULT_HANDOVER_ITEMS` (dossiers, clés, badge, matériel, accès informatiques, documents de fin d'emploi), modifiable (max 20 éléments) ; en replanifiant, les éléments déjà cochés gardent leur état (même libellé). « Transition terminée » n'est possible que si tout est coché.
+- **UI** : `components/dashboard/TransitionCard.tsx` sur `/dashboard/retention/[id]` (au-dessus du questionnaire) : statut (À confirmer / Confirmée / Transition terminée), confirmation, formulaire de rendez-vous, liste de remise avec barre de progression, clôture, rappel « compte encore actif ». Côté employé, « Mon départ » affiche la confirmation, la date/heure, le lieu, les consignes et la liste (lecture seule). Badges « À confirmer / Transition planifiée / Transition terminée » dans « Départs récents ».
+- **Fuseau horaire** : `components/dashboard/LocalDateTime.tsx` formate les dates **dans le navigateur** (le serveur Vercel est en UTC ; un formatage côté serveur décalerait l'heure du rendez-vous). Pour la même raison, les notifications ne contiennent pas l'heure (« Détails dans Mon départ »).
+- **Traçabilité / notifications** : `DEPARTURE_CONFIRMED`, `DEPARTURE_TRANSITION_SCHEDULED`, `DEPARTURE_CLOSED`, `DEPARTURE_REOPENED` (catégorie Départs) ; l'employé est notifié à la confirmation et à chaque (re)planification.
+
+### 7.28 Confidentialité — Loi 25 (1er oct. 2026)
+
+**Demande de l'utilisateur** : informer les employés de l'usage de leurs réponses et de leur durée de conservation, et supprimer automatiquement les données expirées.
+
+- **Avis** : `components/dashboard/PrivacyNotice.tsx`, affiché avant le questionnaire de départ et avant tout sondage **nominatif** (pas les anonymes) : qui voit les réponses, à quoi elles servent, durée de conservation, responsable de la protection des renseignements personnels. Case « J'ai compris » obligatoire : bloque l'envoi côté navigateur ET côté serveur (`privacyAccepted: true` exigé par `POST /api/departures/me` et `POST /api/surveys/[id]/responses` pour un sondage nominatif). Date d'acceptation stockée dans `Departure.privacyNoticeAt` / `SurveyParticipation.privacyNoticeAt`.
+- **Réglages** : carte « Confidentialité (Loi 25) » dans Paramètres (`components/dashboard/PrivacyCard.tsx`, ancre `#confidentialite`). Tous les admins la voient ; seul l'admin principal modifie (`PATCH /api/organization/privacy`, `requirePrimaryAdmin`). Durée 1, 2 ou 3 ans (défaut 3 ans) ; responsable vide = admin principal (comportement par défaut de la loi). Raccourcir la durée demande une confirmation. **Aucune durée par défaut** (demande de l'utilisateur) : choix parmi 6 mois, 1, 2, 3 ou 5 ans ; tant que l'admin principal n'a pas choisi, rien n'est supprimé, l'avis indique aux employés que la durée n'est pas encore fixée, et un bandeau sur le tableau de bord de l'admin principal renvoie vers Paramètres.
+- **Suppression automatique** : `lib/privacy.ts` (`purgeExpiredData`), appelée chaque nuit à 7 h UTC (≈ 3 h à Montréal) par Vercel Cron (`vercel.json`) sur `GET /api/cron/privacy-purge`, protégée par `CRON_SECRET` (comparaison à temps constant ; route hors matcher du middleware). Effets : départs dont le dernier jour dépasse la durée → **supprimés** (questionnaire + transition) ; réponses de sondages nominatifs plus anciennes → **anonymisées** (`participationId = null`, les résultats globaux restent ; la liste nominative les masque). Seules les organisations ayant choisi une durée sont traitées. Avec 6 mois, la vue « 12 mois » de Rétention ne montre plus que 6 mois de départs (prévenu dans la carte).
+- **Traçabilité** : `ORGANIZATION_PRIVACY_UPDATED` et `ORGANIZATION_PRIVACY_PURGE` (acteur « Système », écrit seulement si quelque chose a été supprimé). Date de la dernière exécution affichée dans la carte.
+- **Hors périmètre (à décider plus tard)** : signalements, messages, absences et lignes d'historique contenant un nom ne sont pas concernés par la suppression automatique.
+
+### 7.29 Version anglaise (FR/EN) — étape 1 (1er oct. 2026)
+
+**Demande de l'utilisateur** : application bilingue pour élargir le marché au Canada. Décisions : **par étapes** ; langue **par personne + défaut entreprise** ; espace `/platform` **en français seulement**.
+
+- **Système maison, sans dépendance** (`lib/i18n/`) : `config.ts` (langues, cookie `mm_locale`, `intlLocale` → fr-CA/en-CA), `messages/fr.ts` (référence) et `messages/en.ts` (typé `Messages` : une clé manquante = erreur de compilation), `translator.ts` (`t(clé, {vars})`, pluriels `{one, other}` via `Intl.PluralRules`, `tx(texte)` = traduit si c'est une clé sinon renvoie tel quel, `formatDate/DateTime/Number`), `server.ts` (`getLocale()`/`getI18n()` avec `cache()`), `format.ts` (`formatDuration`). Clés typées (`MessageKey`) : une clé inexistante ne compile pas.
+- **Côté client** : `components/i18n/I18nProvider.tsx` monté dans `app/layout.tsx` (dictionnaire de la langue courante passé en props) + `useI18n()`. `<html lang>` et le titre de l'onglet suivent la langue.
+- **Choix de la langue** (ordre de priorité dans `getLocale`) : 1. `User.locale` (choix enregistré sur le compte) ; 2. cookie `mm_locale` (choix fait sur cet appareil, ex. page de connexion) ; 3. `Organization.defaultLocale` ; 4. pas connecté : `Accept-Language` du navigateur, sinon français. SUPER_ADMIN : toujours français.
+- **Bouton FR | EN** : `components/i18n/LanguageSwitcher.tsx` dans la barre du haut et sur les pages de connexion/inscription → `POST /api/locale` (route publique, hors matcher) : pose le cookie et, si connecté, enregistre `User.locale`, puis `router.refresh()`.
+- **Défaut entreprise** : carte « Langue » dans Paramètres (`components/dashboard/LanguageCard.tsx`, ancre `#langue`, tous les ORG_ADMIN) → `PATCH /api/organization/locale` (action d'historique `ORGANIZATION_LOCALE_UPDATED`). À l'inscription d'une entreprise, `defaultLocale` = langue de la page d'inscription. À l'auto-inscription d'un employé (`/join`), sa langue n'est enregistrée que s'il l'a choisie avec le bouton.
+- **Messages de validation** (`lib/validations/auth.ts`) : les schémas zod renvoient des **clés** (`validation.*`), traduites par `tx()` dans les formulaires et par `t()` dans les routes. Les routes `register` et `join` renvoient leurs erreurs traduites (`getI18n()` fonctionne aussi dans les routes API).
+- **Traduit à l'étape 1** : menu, barre du haut, connexion/inscription/rejoindre/suspendu, tableau de bord (hors libellés d'historique et cartes de résultats de sondage), Paramètres (logo, code d'invitation, équipe d'administration, assistance, confidentialité, langue), avis de confidentialité, `LocalDateTime`.
+- **Reste à traduire (étapes suivantes)** : pages Signalements, Absences, Documents, Annonces, Postes, Avis, Messages, Employés/Départements/Nouvelles recrues, Notifications, Exports (CSV/PDF), Sondages (`SurveyManager`, résultats), Rétention/Départ, Historique (`lib/activity-log.ts`), messages d'erreur des autres routes API, textes des notifications (enregistrés en base au moment de l'envoi, en français). Méthode : ajouter les clés dans `fr.ts` + `en.ts`, `const { t } = await getI18n()` (serveur) ou `useI18n()` (client).
+
+### 7.30 Congés et absences (1er oct. 2026)
+
+**Demande de l'utilisateur** : congés avec demandes, approbation et soldes. Décisions : **types modifiables** par l'admin ; **soldes par type + ajustements individuels** ; approbation par les **admins + le gérant du département** ; **demi-journées** permises. Remplace l'ancienne page Absences (motif libre, sans type ni solde) — même adresse `/dashboard/absences`, menu renommé « Congés ». Entièrement bilingue (clés `leave.*`).
+
+- **Modèle** : `LeaveType` (par entreprise ; 5 types par défaut créés au premier besoin par `ensureLeaveTypes` : Vacances 10 j, Maladie 2 j, Personnel/famille 2 j, Sans solde et Autre non décomptés ; `code` = nom traduit FR/EN tant que l'admin n'a pas mis de `name` ; jamais supprimé, seulement désactivé), `LeaveBalanceAdjustment` (+/− jours pour une personne, un type, une année), nouveaux champs sur `AbsenceRequest` (type, demi-journée, jours décomptés, décision), statut `CANCELLED`, `Organization.leaveYearStartMonth`. Les anciennes demandes (sans type) s'affichent « Autre » et ne comptent dans aucun solde.
+- **Règles** (`lib/leave.ts`) : jours ouvrables lun.-ven. calculés par le serveur (jours fériés NON retirés), 0,5 pour une demi-journée (une seule date) ; une demande compte dans l'année de congés de son premier jour ; solde = jours/année + ajustements − jours approuvés (en attente affichés à part) ; pas deux demandes actives qui se chevauchent pour une même personne ; dépasser le solde n'est pas bloquant (avertissement, l'approbateur décide). Dates stockées à minuit UTC.
+- **Droits** (`approverScope`) : admin = toute l'entreprise ; gérant = son département, jamais ses propres demandes (un gérant sans département n'approuve rien) ; refus = note obligatoire ; mise à jour conditionnelle `status: PENDING` (pas de double traitement). Annulation par la personne : en attente, ou approuvée et pas encore commencée (l'approbateur est prévenu).
+- **Page** `/dashboard/absences` (onglets `?tab=`) : *Mes congés* (cartes de solde, formulaire `AbsenceForm`, liste `AbsencesList`), *À approuver* (`LeaveApprovals` : solde après approbation, collègues du même département déjà absents, traitées récemment), *Calendrier* (mois, `?month=AAAA-MM` ; admins : toute l'entreprise, autres : leur département ; **les collègues voient « Absent(e) » sans le type** — un congé maladie est une information de santé, Loi 25), *Soldes* (admins, `?year=`, `LeaveBalancesTable` + ajustements).
+- **Paramètres** : carte « Types de congés » (`LeaveTypesCard`, ancre `#conges`) : nom, jours/année (vide = non décompté), couleur (palette du design system), actif, ajout (max 12) ; début de l'année de congés (1er janvier par défaut ; 1er mai = année de référence des vacances au Québec).
+- **Routes** : `POST/GET /api/absences`, `PATCH /api/absences/[id]` (`approve` | `reject` | `cancel`), `POST /api/leave/types`, `PATCH /api/leave/types/[id]`, `PATCH /api/leave/settings`, `POST /api/leave/adjustments` (admins) ; middleware : `/api/leave/:path*`. Export CSV/PDF des congés : mêmes droits que l'approbation, colonnes Type et Jours, dans la langue de la personne.
+- **Notifications dans la langue de chaque destinataire** : nouvelle fonction `notifyUsersLocalized` (`lib/notifications.ts`) — à réutiliser pour traduire les autres notifications. Nouvelle demande → admins + gérant(s) du département ; décision → l'employé ; annulation d'un congé approuvé → l'approbateur.
+- **Tableau de bord** : « Congés à approuver » ne compte plus que les demandes que la personne peut traiter, lien direct vers l'onglet.
+- **Historique** : `ABSENCE_CANCELLED`, `ABSENCE_TYPE_CREATED`, `ABSENCE_TYPE_UPDATED`, `ABSENCE_SETTINGS_UPDATED`, `ABSENCE_BALANCE_ADJUSTED`.
+- **Pistes** : jours fériés (liste par entreprise, retirés du décompte), acquisition progressive des vacances selon l'ancienneté, report automatique en fin d'année.
+
+### 7.31 Congés et absences — refonte « simple » + congés programmés (1er oct. 2026)
+
+**Demande de l'utilisateur** : rendre la page compréhensible sans réfléchir (« une maman de 60 ans »). Vocabulaire : une **absence** = ce que l'employé demande ; un **congé** = ce que l'entreprise offre/programme. Les entreprises donnent des congés à des dates variables, pas seulement des jours fériés fixes.
+
+- **Menu** : « Congés et absences » (EN « Time off & absences »). **Onglet « Mon espace »** : 2 colonnes — à gauche « Demander une absence » (`AbsenceForm`), à droite « Congés » (`CompanyLeaves`) — puis « Mes demandes » en dessous, pleine largeur. Les cartes de solde en haut ont été retirées ; à la place, une seule ligne sous le type choisi : « Il te reste 10 jours. »
+- **Vocabulaire** : « solde » remplacé partout par « jours restants » (onglet admin « Jours restants », « Jours restants après approbation »), pour ne pas évoquer l'argent.
+- **Congés programmés** (`CompanyLeave`) : titre, du/au, heures facultatives (« à partir de » le premier jour, « jusqu'à » le dernier), message, destinataires (toute l'entreprise ou certains départements). Admins : « Programmer un congé » / « Retirer » (`POST /api/leave/company`, `DELETE /api/leave/company/[id]`). Les personnes concernées sont notifiées dans leur langue (création et retrait d'un congé pas encore terminé). Affichés comme des annonces (à venir / en cours, « Dans 5 jours »).
+- **Décompte** : les journées ENTIÈRES de congé programmé concernant la personne ne sont pas décomptées des demandes d'absence (`closedDaysFor`, `fullClosedDays`, 4e paramètre de `countLeaveDays`) ; une journée avec heures n'est pas retirée. L'aperçu du formulaire fait le même calcul (`closedDays`). Une demande déjà faite garde le nombre de jours calculé à sa création.
+- **Calendrier** : ligne « Congés de l'entreprise » en tête (plein = journée entière, hachuré = avec heures).
+- **Types par défaut** : « Maladie / obligations familiales » (2 j, un seul total comme aux normes du travail du Québec) remplace Maladie + Personnel. Les entreprises déjà créées gardent leur type « Personnel / famille » : à désactiver dans Paramètres si non voulu. La carte de Paramètres s'appelle « Types d'absence ».
+- **Historique** : `ABSENCE_COMPANY_LEAVE_CREATED`, `ABSENCE_COMPANY_LEAVE_DELETED`.
+
+### 7.32 Congés et absences — mots simples + décompte automatique (1er oct. 2026)
+
+**Demande de l'utilisateur** : retirer tout ce qui fait « juridique » ou « argent » de l'interface, et que tout soit compté automatiquement.
+
+- **Mots retirés de l'interface** : « Loi 25 » (bandeau du tableau de bord, carte « Confidentialité » de Paramètres) ; « solde » (le type « Sans solde » devient « Absence non payée », « les soldes repartent à zéro » devient « les jours repartent à zéro »). La loi reste documentée ici (7.28), pas à l'écran.
+- **Décompte automatique** : toute absence approuvée est comptée, quel que soit son type. Types avec limite : « Il te reste X jours » ; types sans limite : « Tu as pris X jours cette année » (formulaire) et « X pris » (onglet admin « Jours restants », qui affiche maintenant tous les types actifs).
+- **Congés de l'entreprise** : toujours **offerts** (décision de l'utilisateur) — jamais retirés des jours restants, mais comptés : badge « X jours de congé offerts cette année » dans la colonne Congés (journées entières, lun.-ven., année de congés en cours).
+
+### 7.33 Retrait du type « Absence non payée » (1er oct. 2026)
+
+**Demande de l'utilisateur** : aucune information sur la paie dans l'app — ce n'est pas à l'employé de décider s'il est payé ; l'app gère seulement les absences et les congés.
+
+- Le type par défaut `UNPAID` (« Sans solde », puis « Absence non payée ») n'est plus créé pour les nouvelles entreprises. Pour les entreprises existantes, il reste en base mais est **ignoré partout** (`RETIRED_LEAVE_CODES` / `NOT_RETIRED` dans `lib/leave.ts`) : absent du formulaire, de Paramètres, des jours restants, et refusé par `POST /api/absences`. Une ancienne demande de ce type s'affiche « Autre ». Clé de traduction `leave.types.UNPAID` supprimée.
+- Types par défaut désormais : Vacances (10 j), Maladie / obligations familiales (2 j), Autre (sans limite). L'admin peut toujours créer ses propres types.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -917,6 +1026,32 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - **Notifications du propriétaire** (7.25) : aucune migration. Nouveau fichier `app/platform/notifications/page.tsx` ; modifiés `components/platform/PlatformShell.tsx`, `app/platform/layout.tsx`, `app/platform/support/[id]/page.tsx`, `lib/activity-log.ts`, `components/dashboard/CategoryIcon.tsx`.
 
 - **Nettoyage des données de test** : nouveau script one-off `scripts/delete-test-reports.ts` (`npx tsx scripts/delete-test-reports.ts <identifiant-entreprise>` pour l'aperçu, `--confirm` pour supprimer). Supprime uniquement les signalements intitulés exactement « Test Entreprise A » (≈292, créés en masse le 27 sept. 2026 dans l'organisation Mindmate Compagny) + leurs notifications `REPORT_CREATED` et lignes d'historique. Tous les autres signalements sont conservés.
+
+### 30 septembre 2026
+- **Employee Retention Intelligence** (7.26), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_departures`.
+- Nouveaux fichiers : `lib/retention-config.ts`, `lib/retention.ts`, `lib/departures.ts`, `app/api/departures/route.ts`, `app/api/departures/me/route.ts`, `app/api/departures/[id]/route.ts`, `app/dashboard/retention/page.tsx`, `app/dashboard/retention/[id]/page.tsx`, `app/dashboard/departure/page.tsx`, `components/dashboard/{DepartureSurveyForm,RecordDepartureForm,CancelDepartureButton}.tsx`.
+- Fichiers modifiés : `prisma/schema.prisma`, `middleware.ts` (`/api/departures`), `lib/activity-log.ts`, `components/dashboard/{CategoryIcon,Sidebar}.tsx`, `components/dashboard/nav-items.ts`, `app/dashboard/page.tsx`.
+- Vérification : compilation TypeScript isolée (bruit d'environnement seulement) ; un vrai bogue attrapé au passage (`...VISIBLE_USER` après `role: { in: [...] }` écrasait le filtre de rôle — retiré à cet endroit). Non testé en conditions réelles au moment de la rédaction.
+
+- **Fin d'emploi & transition** (7.27), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_departure_transition`. Nouveaux : `components/dashboard/TransitionCard.tsx`, `components/dashboard/LocalDateTime.tsx`. Modifiés : `prisma/schema.prisma`, `lib/retention-config.ts`, `lib/retention.ts`, `lib/activity-log.ts`, `app/api/departures/[id]/route.ts` (PATCH), `app/dashboard/retention/page.tsx`, `app/dashboard/retention/[id]/page.tsx`, `app/dashboard/departure/page.tsx`.
+
+### 1er octobre 2026
+- **Confidentialité — Loi 25** (7.28), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_privacy` (inclut aussi les champs 7.27, jamais migrés). **Variable Vercel à ajouter** : `CRON_SECRET`.
+- Nouveaux : `lib/privacy.ts`, `app/api/cron/privacy-purge/route.ts`, `app/api/organization/privacy/route.ts`, `components/dashboard/{PrivacyNotice,PrivacyCard}.tsx`, `vercel.json`.
+- Modifiés : `prisma/schema.prisma`, `lib/activity-log.ts`, `lib/surveys.ts`, `components/dashboard/{DepartureSurveyForm,SurveyAnswerForm,ActivityLogList}.tsx`, `app/api/departures/me/route.ts`, `app/api/surveys/[id]/responses/route.ts`, `app/dashboard/{departure,surveys,settings}/page.tsx`.
+
+- **Durée choisie par l'admin principal** (7.28, à la demande de l'utilisateur : « pas automatiquement 3 ans ») : `dataRetentionMonths` nullable sans défaut, options 6/12/24/36/60 mois, bandeau de rappel sur le tableau de bord, purge limitée aux organisations ayant choisi. Migration écrite à la main `20261001050000_retention_chosen_by_admin` (à appliquer avec `npx prisma migrate dev`). Modifiés : `prisma/schema.prisma`, `lib/privacy.ts`, `lib/activity-log.ts`, `components/dashboard/{PrivacyNotice,PrivacyCard}.tsx`, `app/dashboard/page.tsx`.
+
+- **Version anglaise — étape 1** (7.29), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_locale`. Nouveaux : `lib/i18n/{config,translator,dictionaries,server,format}.ts`, `lib/i18n/messages/{fr,en}.ts`, `components/i18n/{I18nProvider,LanguageSwitcher}.tsx`, `components/dashboard/LanguageCard.tsx`, `app/api/locale/route.ts`, `app/api/organization/locale/route.ts`. Modifiés : `prisma/schema.prisma`, `app/layout.tsx`, `app/(auth)/*`, `components/auth/{Login,Register,Join}Form.tsx`, `lib/validations/auth.ts`, `app/api/auth/{register,join}/route.ts`, `app/dashboard/{layout,page}.tsx`, `app/dashboard/settings/page.tsx`, `components/dashboard/{DashboardShell,Sidebar,Topbar,SignOutButton,nav-items,LogoUploadCard,InviteCodeCard,AdminsCard,SupportCard,PrivacyCard,PrivacyNotice,LocalDateTime,DepartureSurveyForm,SurveyAnswerForm}`, `lib/privacy.ts`, `lib/activity-log.ts`.
+- **Incident évité** : une copie groupée du dossier de transfert avait remplacé des fichiers de travail par d'anciennes versions ; détecté avant tout envoi vers le PC, fichiers recopiés depuis le PC. Règle : ne copier que les fichiers transférés à l'instant, jamais tout le dossier.
+
+- **Congés et absences** (7.30), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_leave`. Nouveaux : `lib/leave.ts`, `lib/leave-format.ts`, `components/dashboard/{LeaveApprovals,LeaveBalancesTable,LeaveTypesCard}.tsx`, `app/api/leave/{types,types/[id],settings,adjustments}/route.ts`. Réécrits : `app/dashboard/absences/page.tsx`, `components/dashboard/{AbsenceForm,AbsencesList}.tsx`, `app/api/absences/route.ts`, `app/api/absences/[id]/route.ts`, `app/api/exports/absences/route.ts`. Modifiés : `prisma/schema.prisma`, `middleware.ts`, `lib/notifications.ts` (`notifyUsersLocalized`), `lib/activity-log.ts`, `lib/i18n/messages/{fr,en}.ts`, `app/dashboard/{page,settings/page}.tsx`.
+
+- **Congés et absences — refonte simple** (7.31), à la demande explicite de l'utilisateur. **Migration à exécuter** : `npx prisma migrate dev --name add_company_leave`. Nouveaux : `components/dashboard/CompanyLeaves.tsx`, `app/api/leave/company/route.ts`, `app/api/leave/company/[id]/route.ts`. Modifiés : `prisma/schema.prisma`, `lib/leave.ts`, `lib/leave-format.ts`, `lib/activity-log.ts`, `lib/i18n/messages/{fr,en}.ts`, `components/dashboard/AbsenceForm.tsx`, `app/dashboard/absences/page.tsx`, `app/api/absences/route.ts`.
+
+- **Mots simples + décompte automatique** (7.32), à la demande explicite de l'utilisateur. Aucune migration. Modifiés : `lib/i18n/messages/{fr,en}.ts`, `components/dashboard/{AbsenceForm,CompanyLeaves,LeaveBalancesTable}.tsx`, `app/dashboard/absences/page.tsx`.
+
+- **Retrait du type « Absence non payée »** (7.33), à la demande explicite de l'utilisateur. Aucune migration. Modifiés : `lib/leave.ts`, `lib/leave-format.ts`, `app/api/absences/route.ts`, `lib/i18n/messages/{fr,en}.ts`.
 
 ## 14. Refonte esthétique (en cours)
 

@@ -47,6 +47,7 @@ enum AbsenceStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED // annulée par l'employé lui-même (Congés, AUDIT.md 7.30)
 }
 
 enum JobPostingStatus {
@@ -69,6 +70,21 @@ enum SurveyStatus {
 enum SupportTicketStatus {
   OPEN      // en attente / en cours
   RESOLVED  // marqué résolu par le propriétaire de la plateforme
+}
+
+// Départs d'employés — Employee Retention Intelligence (voir AUDIT.md 7.26)
+enum DepartureType {
+  RESIGNATION      // démission
+  END_OF_CONTRACT  // fin de contrat / CDD
+  DISMISSAL        // licenciement / renvoi
+  RETIREMENT       // retraite
+  OTHER
+}
+
+enum DepartureStatus {
+  PENDING_SURVEY   // départ enregistré par un admin, questionnaire envoyé à l'employé, pas encore rempli
+  COMPLETED        // questionnaire rempli
+  NO_SURVEY        // départ enregistré sans questionnaire (ex. licenciement)
 }
 
 enum UserStatus {
@@ -95,6 +111,22 @@ model Organization {
   // organisations créées avant cette fonctionnalité : rempli paresseusement
   // (ORG_ADMIN le plus ancien) par lib/admins.ts au premier besoin.
   primaryAdminId String?
+  // Confidentialité / Loi 25 (voir AUDIT.md 7.28) : durée de conservation des
+  // réponses NOMINATIVES (questionnaires de départ, sondages nominatifs) et
+  // responsable de la protection des renseignements personnels affiché aux
+  // employés. Responsable vide = l'admin principal (par défaut, la loi désigne
+  // la personne ayant la plus haute autorité dans l'entreprise).
+  // Durée : AUCUNE valeur par défaut, c'est l'admin principal qui la choisit
+  // (6, 12, 24, 36 ou 60 mois). Tant qu'elle est vide, rien n'est supprimé.
+  dataRetentionMonths Int?
+  privacyOfficerName  String?
+  privacyOfficerEmail String?
+  lastPrivacyPurgeAt  DateTime? // dernière exécution de la suppression automatique
+  // Langue par défaut des comptes qui n'ont pas choisi la leur (FR/EN, AUDIT.md 7.29).
+  defaultLocale       String    @default("fr")
+  // Mois de début de l'année de congés (1 = janvier ; 5 = mai, année de référence
+  // des vacances au Québec). Voir AUDIT.md 7.30.
+  leaveYearStartMonth Int       @default(1)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -108,6 +140,9 @@ model Organization {
   notifications    Notification[]
   surveys          Survey[]
   supportTickets   SupportTicket[]
+  departures       Departure[]
+  leaveTypes       LeaveType[]
+  companyLeaves    CompanyLeave[]
 
   @@map("organizations")
 }
@@ -147,6 +182,7 @@ model User {
   status         UserStatus   @default(ACTIVE)
   avatarUrl      String?
   hireDate       DateTime?    @default(now()) // utile pour "nouvelles recrues"
+  locale         String?      // "fr" | "en" choisi par la personne (null = langue par défaut de l'entreprise, AUDIT.md 7.29)
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -161,11 +197,14 @@ model User {
   announcementsPosted  Announcement[]    @relation("AnnouncementAuthor")
   filesUploaded        FileUpload[]      @relation("FileUploader")
   notifications        Notification[]
+  leaveAdjustments     LeaveBalanceAdjustment[]
   pushSubscriptions    PushSubscription[]
   surveysCreated       Survey[]              @relation("SurveyAuthor")
   surveyParticipations SurveyParticipation[]
   supportTickets       SupportTicket[]       @relation("SupportTicketAuthor")
   supportMessages      SupportMessage[]      @relation("SupportMessageSender")
+  departures           Departure[]           @relation("DepartureEmployee")
+  departuresRecorded   Departure[]           @relation("DepartureRecorder")
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -226,15 +265,90 @@ model AbsenceRequest {
 
   startDate      DateTime
   endDate        DateTime
-  reason         String
+  reason         String        @default("") // commentaire facultatif de l'employé (obligatoire avant 7.30)
   status         AbsenceStatus @default(PENDING)
+
+  // --- Congés (AUDIT.md 7.30) ---
+  leaveTypeId    String?       // null = demande créée avant les types de congés (affichée « Autre », hors soldes)
+  leaveType      LeaveType?    @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  halfDay        String?       // "AM" | "PM" : demi-journée (seulement si début = fin)
+  days           Float?        // jours ouvrables décomptés (lun.-ven. ; 0,5 pour une demi-journée)
+  decidedById    String?       // admin/gérant qui a approuvé ou refusé
+  decidedAt      DateTime?
+  decisionNote   String?       // motif du refus ou mot accompagnant l'approbation
 
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([userId])
   @@map("absence_requests")
+}
+
+// ------------------------------------------------------------
+// CONGÉS (AUDIT.md 7.30) — types de congés propres à chaque entreprise et
+// ajustements de solde individuels. Solde d'un type pour une année de congés =
+// daysPerYear + ajustements de l'année − jours approuvés.
+// ------------------------------------------------------------
+model LeaveType {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String?      // type par défaut ("VACATION", "SICK", "PERSONAL", "UNPAID", "OTHER") : nom traduit FR/EN tant que `name` est vide
+  name           String?      // nom personnalisé par l'admin (prioritaire sur le nom traduit)
+  color          String       @default("#1F8A6E")
+  daysPerYear    Float?       // null = pas de solde (illimité, ex. sans solde)
+  isActive       Boolean      @default(true)
+  position       Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  requests       AbsenceRequest[]
+  adjustments    LeaveBalanceAdjustment[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("leave_types")
+}
+
+// Congés programmés par l'entreprise (fermeture des fêtes, journée offerte,
+// après-midi libre…), affichés comme des annonces dans « Congés et absences »
+// (AUDIT.md 7.31). Les journées ENTIÈRES couvertes ne sont pas décomptées des
+// demandes d'absence des personnes concernées.
+model CompanyLeave {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String
+  message        String?
+  startDate      DateTime     // jour (minuit UTC)
+  endDate        DateTime     // jour (minuit UTC), = startDate pour un seul jour
+  startTime      String?      // "13:00" : à partir de cette heure le premier jour (facultatif)
+  endTime        String?      // "12:00" : jusqu'à cette heure le dernier jour (facultatif)
+  departmentIds  String[]     @default([]) // vide = toute l'entreprise
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, startDate])
+  @@map("company_leaves")
+}
+
+model LeaveBalanceAdjustment {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveTypeId    String
+  leaveType      LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  year           Int       // année de congés (année de son premier jour)
+  days           Float     // + ou − (ex. +2 ancienneté, +3 report, −1 correction)
+  note           String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+
+  @@index([organizationId, year])
+  @@index([userId])
+  @@map("leave_balance_adjustments")
 }
 
 // ------------------------------------------------------------
@@ -509,6 +623,7 @@ model SurveyParticipation {
   survey         Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  privacyNoticeAt DateTime? // avis de confidentialité accepté (sondages nominatifs, AUDIT.md 7.28)
   createdAt      DateTime @default(now())
 
   answers        SurveyAnswer[]
@@ -579,6 +694,66 @@ model SupportMessage {
 
   @@index([ticketId])
   @@map("support_messages")
+}
+
+// ------------------------------------------------------------
+// DEPARTURE — un départ d'employé + son questionnaire de départ
+// (Employee Retention Intelligence, voir AUDIT.md 7.26 et lib/retention.ts).
+// Questionnaire FIXE (identique pour tous) pour que les tendances restent
+// comparables d'un mois et d'une entreprise à l'autre. Réponses NOMINATIVES :
+// les admins voient qui a répondu quoi (choix de l'utilisateur).
+// departmentId / hireDate sont des COPIES prises au moment du départ : si le
+// département est renommé ou l'employé déplacé ensuite, l'historique reste juste.
+// ------------------------------------------------------------
+model Departure {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation("DepartureEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  recordedById   String?         // admin qui a enregistré le départ (null = déclaré par l'employé lui-même)
+  recordedBy     User?           @relation("DepartureRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  type           DepartureType   @default(RESIGNATION)
+  status         DepartureStatus @default(PENDING_SURVEY)
+  lastDay        DateTime        // dernier jour de travail
+  departmentId   String?         // copie au moment du départ
+  hireDate       DateTime?       // copie au moment du départ (ancienneté)
+
+  // --- Questionnaire de départ (codes définis dans lib/retention.ts) ---
+  primaryReason     String?      // ex. "CAREER"
+  secondaryReasons  String[]     @default([]) // autres raisons, ex. ["PAY", "WORKLOAD"]
+  details           String[]     @default([]) // sous-causes précises, ex. ["CAREER_NO_PROMOTION", "PAY_BELOW_MARKET"]
+  ratingManager     Int?         // 1 à 5
+  ratingGrowth      Int?
+  ratingWorkload    Int?
+  ratingPay         Int?
+  ratingAtmosphere  Int?
+  ratingRecognition Int?
+  couldBeRetained   String?      // "YES" | "MAYBE" | "NO"
+  retentionLever    String?      // ce qui l'aurait retenu, ex. "PROMOTION"
+  wouldRecommend    String?      // "YES" | "MAYBE" | "NO"
+  wouldReturn       String?      // "YES" | "MAYBE" | "NO"
+  comment           String?
+  submittedAt       DateTime?
+  privacyNoticeAt   DateTime?    // avis de confidentialité accepté avant le questionnaire (AUDIT.md 7.28)
+
+  // --- Fin d'emploi & transition (admin PRINCIPAL seulement, voir AUDIT.md 7.27) ---
+  confirmedAt        DateTime?   // fin d'emploi confirmée
+  confirmedById      String?     // admin principal qui a confirmé (id texte, pas de relation, comme AuditLog.actorId)
+  transitionAt       DateTime?   // rendez-vous de transition (date + heure)
+  transitionLocation String?     // ex. "Bureau RH, 2e étage" ou lien visio
+  transitionNotes    String?     // consignes pour l'employé
+  handoverItems      Json?       // liste de remise : [{ id, label, done, doneAt }] (dossiers, clés, badge, accès informatiques…)
+  closedAt           DateTime?   // transition terminée (tout est remis). Le compte n'est PAS désactivé automatiquement.
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, lastDay])
+  @@index([userId])
+  @@map("departures")
 }
 
 // ------------------------------------------------------------

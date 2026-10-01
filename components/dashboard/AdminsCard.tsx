@@ -16,6 +16,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 // ------------------------------------------------------------
 // Paramètres > Équipe d'administration (voir AUDIT.md 7.22).
@@ -56,6 +57,7 @@ export function AdminsCard({
   maxCoAdmins: number;
 }) {
   const router = useRouter();
+  const { t, tx } = useI18n();
   const coAdmins = admins.filter((a) => !a.isPrimary);
   const slotsLeft = maxCoAdmins - coAdmins.length;
 
@@ -99,7 +101,7 @@ export function AdminsCard({
     setSuccess(null);
     const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
     const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(data?.error ?? "L'opération a échoué.");
+    if (!res.ok) throw new Error(data?.error ? tx(data.error) : t("common.operationFailed"));
     setSuccess(okMessage);
     router.refresh();
   }
@@ -112,11 +114,11 @@ export function AdminsCard({
         `/api/admins/${admin.id}`,
         { method: "PATCH", body: JSON.stringify({ status: next }) },
         next === "DISABLED"
-          ? `${admin.firstName} ne peut plus se connecter.`
-          : `${admin.firstName} a de nouveau accès.`
+          ? t("settings.admins.okDisabled", { name: admin.firstName })
+          : t("settings.admins.okReactivated", { name: admin.firstName })
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     } finally {
       setBusyId(null);
     }
@@ -129,12 +131,12 @@ export function AdminsCard({
         `/api/admins/${admin.id}`,
         { method: "DELETE", body: JSON.stringify({ disableAccount }) },
         disableAccount
-          ? `${admin.firstName} n'est plus admin et son compte est désactivé.`
-          : `${admin.firstName} est redevenu employé.`
+          ? t("settings.admins.okRemovedDisabled", { name: admin.firstName })
+          : t("settings.admins.okRemoved", { name: admin.firstName })
       );
       setConfirmRemoveId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     } finally {
       setBusyId(null);
     }
@@ -151,12 +153,12 @@ export function AdminsCard({
       await call(
         "/api/admins",
         { method: "POST", body: JSON.stringify(payload) },
-        replaceTarget ? "Co-admin remplacé." : "Co-admin ajouté."
+        replaceTarget ? t("settings.admins.okReplaced") : t("settings.admins.okAdded")
       );
       setPanelOpen(false);
       setReplaceTarget(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     } finally {
       setSubmitting(false);
     }
@@ -173,17 +175,15 @@ export function AdminsCard({
         <div>
           <h2 className="flex items-center gap-2 text-sm font-medium text-[#1C2438]">
             <ShieldCheck className="h-4 w-4 text-[#2F6F5E]" strokeWidth={1.9} />
-            Équipe d&apos;administration
+            {t("settings.admins.title")}
           </h2>
           <p className="mt-1 text-sm text-[#5B6478]">
-            1 administrateur principal et jusqu&apos;à {maxCoAdmins} co-admins avec les mêmes droits.
-            {isPrimary
-              ? " Toi seul peux les ajouter, désactiver, remplacer ou retirer."
-              : " Seul l'administrateur principal peut modifier cette équipe."}
+            {t("settings.admins.description", { max: maxCoAdmins })}{" "}
+            {isPrimary ? t("settings.admins.primaryCanEdit") : t("settings.admins.onlyPrimaryCanEdit")}
           </p>
         </div>
         <span className="rounded-full bg-[#F3F5F8] px-3 py-1 text-xs font-medium text-[#1C2438]">
-          {coAdmins.length} / {maxCoAdmins} co-admins
+          {t("settings.admins.count", { count: coAdmins.length, max: maxCoAdmins })}
         </span>
       </div>
 
@@ -206,16 +206,16 @@ export function AdminsCard({
                   {admin.firstName} {admin.lastName}
                   {admin.isPrimary ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#FDF3E3] px-2 py-0.5 text-[11px] font-medium text-[#8A6A1C]">
-                      <Crown className="h-3 w-3" strokeWidth={2} /> Principal
+                      <Crown className="h-3 w-3" strokeWidth={2} /> {t("settings.admins.primary")}
                     </span>
                   ) : (
                     <span className="rounded-full bg-[#E7F0FA] px-2 py-0.5 text-[11px] font-medium text-[#2A5A8A]">
-                      Co-admin
+                      {t("settings.admins.coAdmin")}
                     </span>
                   )}
                   {admin.status === "DISABLED" && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#F4E7E7] px-2 py-0.5 text-[11px] font-medium text-[#8A3B3B]">
-                      <XCircle className="h-3 w-3" strokeWidth={2} /> Désactivé
+                      <XCircle className="h-3 w-3" strokeWidth={2} /> {t("settings.admins.disabled")}
                     </span>
                   )}
                 </p>
@@ -232,7 +232,7 @@ export function AdminsCard({
                         disabled={busy}
                         className="rounded-md bg-[#C2542C] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#A8451F] disabled:opacity-60"
                       >
-                        Retirer (redevient employé)
+                        {t("settings.admins.removeKeepEmployee")}
                       </button>
                       <button
                         type="button"
@@ -240,14 +240,14 @@ export function AdminsCard({
                         disabled={busy}
                         className="rounded-md border border-[#8A3B3B] px-2.5 py-1.5 text-xs font-medium text-[#8A3B3B] hover:bg-[#FDECEC] disabled:opacity-60"
                       >
-                        Retirer et désactiver le compte
+                        {t("settings.admins.removeAndDisable")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmRemoveId(null)}
                         className="text-xs text-[#5B6478] hover:text-[#1C2438]"
                       >
-                        Annuler
+                        {t("common.cancel")}
                       </button>
                     </>
                   ) : (
@@ -269,7 +269,7 @@ export function AdminsCard({
                         ) : (
                           <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
                         )}
-                        {admin.status === "ACTIVE" ? "Désactiver" : "Réactiver"}
+                        {admin.status === "ACTIVE" ? t("settings.admins.disable") : t("settings.admins.reactivate")}
                       </button>
                       <button
                         type="button"
@@ -277,7 +277,7 @@ export function AdminsCard({
                         disabled={busy}
                         className="inline-flex items-center gap-1 rounded-md border border-[#DADEE5] px-2.5 py-1.5 text-xs font-medium text-[#1C2438] hover:border-[#2F6F5E] hover:text-[#2F6F5E] disabled:opacity-60"
                       >
-                        <RefreshCw className="h-3 w-3" strokeWidth={2} /> Remplacer
+                        <RefreshCw className="h-3 w-3" strokeWidth={2} /> {t("settings.admins.replace")}
                       </button>
                       <button
                         type="button"
@@ -285,7 +285,7 @@ export function AdminsCard({
                         disabled={busy}
                         className="inline-flex items-center gap-1 rounded-md border border-[#DADEE5] px-2.5 py-1.5 text-xs font-medium text-[#1C2438] hover:border-[#C2542C] hover:text-[#C2542C] disabled:opacity-60"
                       >
-                        <UserMinus className="h-3 w-3" strokeWidth={2} /> Retirer
+                        <UserMinus className="h-3 w-3" strokeWidth={2} /> {t("settings.admins.remove")}
                       </button>
                     </>
                   )}
@@ -313,7 +313,7 @@ export function AdminsCard({
           onClick={() => openPanel(null)}
           className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-4 py-2 text-sm font-medium text-white shadow-[0_2px_10px_-2px_rgba(47,111,94,0.5)] transition-all hover:-translate-y-px"
         >
-          <UserPlus className="h-4 w-4" strokeWidth={2} /> Ajouter un co-admin
+          <UserPlus className="h-4 w-4" strokeWidth={2} /> {t("settings.admins.add")}
         </button>
       )}
 
@@ -322,8 +322,8 @@ export function AdminsCard({
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-[#1C2438]">
               {replaceTarget
-                ? `Remplacer ${replaceTarget.firstName} ${replaceTarget.lastName}`
-                : "Nouveau co-admin"}
+                ? t("settings.admins.replaceTitle", { name: `${replaceTarget.firstName} ${replaceTarget.lastName}` })
+                : t("settings.admins.newTitle")}
             </p>
             <button
               type="button"
@@ -331,7 +331,7 @@ export function AdminsCard({
                 setPanelOpen(false);
                 setReplaceTarget(null);
               }}
-              aria-label="Fermer"
+              aria-label={t("common.close")}
               className="text-[#5B6478] hover:text-[#1C2438]"
             >
               <X className="h-4 w-4" />
@@ -339,7 +339,7 @@ export function AdminsCard({
           </div>
           {replaceTarget && (
             <p className="mt-1 text-xs text-[#5B6478]">
-              {replaceTarget.firstName} redeviendra employé au moment où le nouveau co-admin sera ajouté.
+              {t("settings.admins.replaceHint", { name: replaceTarget.firstName })}
             </p>
           )}
 
@@ -353,26 +353,26 @@ export function AdminsCard({
                   mode === m ? "bg-[#2F6F5E] text-white" : "text-[#5B6478] hover:text-[#1C2438]"
                 }`}
               >
-                {m === "promote" ? "Promouvoir un employé" : "Créer un compte"}
+                {m === "promote" ? t("settings.admins.modePromote") : t("settings.admins.modeCreate")}
               </button>
             ))}
           </div>
 
           {mode === "promote" ? (
             <div className="mt-3">
-              <label className="block text-sm font-medium text-[#1C2438]">Rechercher un employé</label>
+              <label className="block text-sm font-medium text-[#1C2438]">{t("settings.admins.searchLabel")}</label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 mt-0.5 h-4 w-4 -translate-y-1/2 text-[#9AA1B2]" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Nom ou courriel"
+                  placeholder={t("settings.admins.searchPlaceholder")}
                   className={`${inputClass} pl-9`}
                 />
               </div>
               {candidates.length === 0 ? (
                 <p className="mt-2 text-sm text-[#9AA1B2]">
-                  Aucun employé actif à promouvoir. Utilise « Créer un compte ».
+                  {t("settings.admins.noCandidates")}
                 </p>
               ) : (
                 <ul className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-[#E2E4E9] bg-white">
@@ -396,7 +396,7 @@ export function AdminsCard({
                     </li>
                   ))}
                   {matches.length === 0 && (
-                    <li className="px-3 py-2 text-sm text-[#9AA1B2]">Aucun résultat.</li>
+                    <li className="px-3 py-2 text-sm text-[#9AA1B2]">{t("settings.admins.noResults")}</li>
                   )}
                 </ul>
               )}
@@ -404,7 +404,7 @@ export function AdminsCard({
           ) : (
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm font-medium text-[#1C2438]">
-                Prénom
+                {t("auth.fields.firstName")}
                 <input
                   value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -412,7 +412,7 @@ export function AdminsCard({
                 />
               </label>
               <label className="text-sm font-medium text-[#1C2438]">
-                Nom
+                {t("auth.fields.lastName")}
                 <input
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -420,7 +420,7 @@ export function AdminsCard({
                 />
               </label>
               <label className="text-sm font-medium text-[#1C2438]">
-                Courriel
+                {t("auth.fields.email")}
                 <input
                   type="email"
                   value={form.email}
@@ -429,7 +429,7 @@ export function AdminsCard({
                 />
               </label>
               <label className="text-sm font-medium text-[#1C2438]">
-                Mot de passe temporaire
+                {t("settings.admins.tempPassword")}
                 <input
                   type="password"
                   autoComplete="new-password"
@@ -439,8 +439,7 @@ export function AdminsCard({
                 />
               </label>
               <p className="text-xs text-[#5B6478] sm:col-span-2">
-                8 caractères minimum, avec une majuscule et un chiffre. Transmets-le à la personne :
-                elle se connectera avec l&apos;identifiant de l&apos;entreprise, ce courriel et ce mot de passe.
+                {t("settings.admins.passwordHint")}
               </p>
             </div>
           )}
@@ -455,7 +454,7 @@ export function AdminsCard({
             ) : (
               <ShieldCheck className="h-4 w-4" strokeWidth={2} />
             )}
-            {replaceTarget ? "Confirmer le remplacement" : "Donner les droits d'administration"}
+            {replaceTarget ? t("settings.admins.confirmReplace") : t("settings.admins.grant")}
           </button>
         </form>
       )}

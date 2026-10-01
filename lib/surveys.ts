@@ -219,7 +219,10 @@ export async function getSurveyResults(surveyId: string, organizationId: string)
         answers: { select: { questionId: true, option: { select: { label: true } } } },
       },
     });
-    individualResponses = participations.map((p) => ({
+    // Réponses dont le lien avec la personne a été coupé par la suppression
+    // automatique (Loi 25, AUDIT.md 7.28) : elles restent dans les résultats
+    // globaux, mais plus dans la liste nominative.
+    individualResponses = participations.filter((p) => p.answers.length > 0).map((p) => ({
       name: `${p.user.firstName} ${p.user.lastName}`,
       department: p.user.department?.name ?? null,
       answeredAt: p.createdAt,

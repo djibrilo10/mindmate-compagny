@@ -3,18 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { registerSchema } from "@/lib/validations/auth";
 import { slugify } from "@/lib/slug";
+import { getI18n } from "@/lib/i18n/server";
 
 export async function POST(request: Request) {
+  // Langue de la page d'inscription (bouton FR/EN ou navigateur) : sert aux
+  // messages d'erreur ET devient la langue par défaut de la nouvelle
+  // entreprise (modifiable ensuite dans Paramètres, AUDIT.md 7.29).
+  const { t, locale } = await getI18n();
   const body = await request.json().catch(() => null);
 
   if (!body) {
-    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+    return NextResponse.json({ error: t("errors.invalidRequest") }, { status: 400 });
   }
 
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Données invalides." },
+      { error: parsed.error.issues[0]?.message ?? "errors.invalidData" },
       { status: 400 }
     );
   }
@@ -37,7 +42,7 @@ export async function POST(request: Request) {
     slug = `${baseSlug}-${suffix}`;
     if (suffix > 50) {
       return NextResponse.json(
-        { error: "Impossible de générer un identifiant unique pour cette entreprise. Réessayez avec un autre nom." },
+        { error: t("errors.slugUnavailable") },
         { status: 500 }
       );
     }
@@ -51,7 +56,7 @@ export async function POST(request: Request) {
     // ou un admin sans organisation, même en cas d'erreur en cours de route.
     await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
-        data: { name: organizationName, slug },
+        data: { name: organizationName, slug, defaultLocale: locale },
       });
 
       const generalDepartment = await tx.department.create({
@@ -84,7 +89,7 @@ export async function POST(request: Request) {
     // dans le terminal du serveur pour le debug.
     console.error("Erreur lors de la création de l'organisation :", error);
     return NextResponse.json(
-      { error: "Impossible de créer l'organisation. Vérifiez le terminal du serveur pour le détail." },
+      { error: t("errors.orgCreateFailed") },
       { status: 500 }
     );
   }

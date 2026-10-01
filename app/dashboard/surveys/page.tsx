@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { isSurveyOpen } from "@/lib/surveys";
 import { SurveyAnswerForm } from "@/components/dashboard/SurveyAnswerForm";
+import { getPrivacyInfo } from "@/lib/privacy";
 
 // ------------------------------------------------------------
 // Sondages (voir AUDIT.md 7.23).
@@ -48,6 +49,8 @@ export default async function SurveysPage() {
 
   const toAnswer = surveys.filter((s) => isSurveyOpen(s) && !answered.has(s.id));
   const others = surveys.filter((s) => !toAnswer.includes(s));
+  // Avis de confidentialité des sondages nominatifs (Loi 25, AUDIT.md 7.28).
+  const privacy = await getPrivacyInfo(ctx.organizationId);
 
   return (
     <div>
@@ -97,6 +100,7 @@ export default async function SurveysPage() {
             <SurveyAnswerForm
               surveyId={s.id}
               isAnonymous={s.isAnonymous}
+              privacy={privacy}
               questions={s.questions.map((q) => ({ id: q.id, text: q.text, options: q.options }))}
             />
           </div>

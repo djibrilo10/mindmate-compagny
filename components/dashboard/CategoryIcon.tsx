@@ -2,6 +2,7 @@ import {
   Briefcase,
   Building2,
   CalendarDays,
+  DoorOpen,
   ClipboardList,
   FileText,
   Flag,
@@ -29,6 +30,7 @@ const CATEGORY_ICON_COMPONENTS: Record<ActivityCategory, LucideIcon> = {
   USER: User,
   SURVEY: ClipboardList,
   SUPPORT: LifeBuoy,
+  DEPARTURE: DoorOpen,
   ORGANIZATION: Building2,
 };
 

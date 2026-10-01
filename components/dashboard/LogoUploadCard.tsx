@@ -3,6 +3,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { ImageUp, Loader2, Trash2 } from "lucide-react";
 import { MAX_LOGO_SIZE, formatFileSize, isAllowedLogoType } from "@/lib/attachments";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 export function LogoUploadCard({
   hasCustomLogo,
@@ -18,6 +19,7 @@ export function LogoUploadCard({
   const [isRemoving, setIsRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t, tx } = useI18n();
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -27,11 +29,11 @@ export function LogoUploadCard({
     setError(null);
 
     if (!isAllowedLogoType(file.type)) {
-      setError("Format non pris en charge. Utilise une image PNG, JPG ou WEBP.");
+      setError(t("settings.logo.badFormat"));
       return;
     }
     if (file.size > MAX_LOGO_SIZE) {
-      setError(`Cette image dépasse ${formatFileSize(MAX_LOGO_SIZE)}. Choisis-en une plus légère.`);
+      setError(t("settings.logo.tooBig", { size: formatFileSize(MAX_LOGO_SIZE) }));
       return;
     }
 
@@ -44,14 +46,14 @@ export function LogoUploadCard({
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(data?.error ?? "Impossible de téléverser ce logo.");
+        setError(data?.error ? tx(data.error) : t("settings.logo.uploadFailed"));
         return;
       }
 
       setHasLogo(true);
       setVersion(Date.now()); // force le rechargement de l'aperçu (nouveau logo, même URL)
     } catch {
-      setError("Impossible de contacter le serveur.");
+      setError(t("common.serverUnreachable"));
     } finally {
       setIsUploading(false);
     }
@@ -69,13 +71,13 @@ export function LogoUploadCard({
       const res = await fetch("/api/organization/logo", { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Impossible de retirer le logo.");
+        setError(data?.error ? tx(data.error) : t("settings.logo.removeFailed"));
         return;
       }
       setHasLogo(false);
       setVersion(Date.now());
     } catch {
-      setError("Impossible de contacter le serveur.");
+      setError(t("common.serverUnreachable"));
     } finally {
       setIsRemoving(false);
       setConfirmingRemove(false);
@@ -84,12 +86,8 @@ export function LogoUploadCard({
 
   return (
     <div className="max-w-xl rounded-xl border border-[#E4E7EE] bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
-      <h2 className="text-sm font-medium text-[#1C2438]">Logo de l&apos;organisation</h2>
-      <p className="mt-1 text-sm text-[#5B6478]">
-        Ce logo remplace celui de la plateforme dans la barre latérale, pour
-        tous tes employés une fois connectés. Chaque entreprise a le sien —
-        PNG, JPG ou WEBP, 2 Mo maximum.
-      </p>
+      <h2 className="text-sm font-medium text-[#1C2438]">{t("settings.logo.title")}</h2>
+      <p className="mt-1 text-sm text-[#5B6478]">{t("settings.logo.description")}</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-4">
         {/* Aperçu fidèle à ce que verra l'employé dans la barre latérale
@@ -102,7 +100,7 @@ export function LogoUploadCard({
             <img
               key={version}
               src={`/api/organization/logo?v=${version}`}
-              alt="Logo de l'organisation"
+              alt={t("settings.logo.alt")}
               className="h-full w-full object-contain"
             />
           )}
@@ -116,7 +114,7 @@ export function LogoUploadCard({
             className="inline-flex items-center gap-1.5 rounded-md border border-[#DADEE5] px-3 py-2 text-sm font-medium text-[#1C2438] transition-colors hover:border-[#2F6F5E] hover:text-[#2F6F5E] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <ImageUp className="h-4 w-4" strokeWidth={1.9} />
-            {hasLogo ? "Changer le logo" : "Téléverser un logo"}
+            {hasLogo ? t("settings.logo.change") : t("settings.logo.upload")}
           </button>
           <input
             ref={inputRef}
@@ -138,7 +136,11 @@ export function LogoUploadCard({
               }`}
             >
               <Trash2 className="h-4 w-4" strokeWidth={1.9} />
-              {isRemoving ? "Retrait…" : confirmingRemove ? "Confirmer le retrait" : "Retirer"}
+              {isRemoving
+                ? t("settings.logo.removing")
+                : confirmingRemove
+                  ? t("settings.logo.confirmRemove")
+                  : t("settings.logo.remove")}
             </button>
           )}
           {confirmingRemove && !isRemoving && (
@@ -147,7 +149,7 @@ export function LogoUploadCard({
               onClick={() => setConfirmingRemove(false)}
               className="text-sm text-[#5B6478] hover:text-[#1C2438]"
             >
-              Annuler
+              {t("common.cancel")}
             </button>
           )}
         </div>
@@ -155,7 +157,7 @@ export function LogoUploadCard({
 
       {!hasLogo && (
         <p className="mt-3 text-xs text-[#9AA3B5]">
-          Aucun logo personnalisé — le logo par défaut de la plateforme est affiché en attendant.
+          {t("settings.logo.noCustom")}
         </p>
       )}
 

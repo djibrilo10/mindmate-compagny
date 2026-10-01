@@ -8,6 +8,12 @@ import { LogoUploadCard } from "@/components/dashboard/LogoUploadCard";
 import { AdminsCard } from "@/components/dashboard/AdminsCard";
 import { SurveyManager } from "@/components/dashboard/SurveyManager";
 import { SupportCard } from "@/components/dashboard/SupportCard";
+import { PrivacyCard } from "@/components/dashboard/PrivacyCard";
+import { LanguageCard } from "@/components/dashboard/LanguageCard";
+import { LeaveTypesCard } from "@/components/dashboard/LeaveTypesCard";
+import { getLeaveTypes } from "@/lib/leave";
+import { leaveTypeLabel } from "@/lib/leave-format";
+import { getI18n } from "@/lib/i18n/server";
 import { PLATFORM_BRAND, PLATFORM_CONTACT_NAME } from "@/lib/support";
 import { MAX_CO_ADMINS, getPrimaryAdminId } from "@/lib/admins";
 import { eligibleRespondentsWhere, isSurveyOpen } from "@/lib/surveys";
@@ -31,7 +37,18 @@ export default async function SettingsPage() {
 
   const organization = await prisma.organization.findUnique({
     where: { id: ctx.organizationId },
-    select: { name: true, inviteCode: true, logoMimeType: true, logoUpdatedAt: true },
+    select: {
+      name: true,
+      inviteCode: true,
+      logoMimeType: true,
+      logoUpdatedAt: true,
+      dataRetentionMonths: true,
+      privacyOfficerName: true,
+      privacyOfficerEmail: true,
+      lastPrivacyPurgeAt: true,
+      defaultLocale: true,
+      leaveYearStartMonth: true,
+    },
   });
   if (!organization) redirect("/dashboard");
 
@@ -132,6 +149,10 @@ export default async function SettingsPage() {
     })),
   }));
 
+  // Confidentialité (7.28) : nom affiché par défaut = l'admin principal.
+  const primaryAdmin = admins.find((a) => a.id === primaryAdminId);
+  const defaultOfficerName = primaryAdmin ? `${primaryAdmin.firstName} ${primaryAdmin.lastName}` : "l'admin principal";
+
   // L'admin principal toujours en tête de liste.
   const adminRows = admins
     .map((a) => ({ ...a, isPrimary: a.id === primaryAdminId }))
@@ -148,6 +169,10 @@ export default async function SettingsPage() {
     respondents: s._count.participations,
   }));
 
+  const { t } = await getI18n();
+  // Types de congés (7.30) : admins seulement.
+  const leaveTypes = ctx.role === "ORG_ADMIN" ? await getLeaveTypes(ctx.organizationId) : [];
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3 animate-fade-in-up">
@@ -156,10 +181,10 @@ export default async function SettingsPage() {
         </span>
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1C2438]">
-            Paramètres
+            {t("settings.title")}
           </h1>
           <p className="mt-0.5 text-sm text-[#5B6478]">
-            Personnalise l&apos;espace de {organization.name}, gère l&apos;accès de tes employés, ton équipe d&apos;administration et tes sondages.
+            {t("settings.subtitle", { org: organization.name })}
           </p>
         </div>
       </div>
@@ -177,12 +202,47 @@ export default async function SettingsPage() {
         </div>
 
         {ctx.role === "ORG_ADMIN" && (
+          <div id="langue" className="animate-fade-in-up stagger-2 scroll-mt-20">
+            <LanguageCard initialLocale={organization.defaultLocale === "en" ? "en" : "fr"} />
+          </div>
+        )}
+
+        {ctx.role === "ORG_ADMIN" && (
           <div className="animate-fade-in-up stagger-3">
             <AdminsCard
               admins={adminRows}
               candidates={candidates}
               isPrimary={isPrimary}
               maxCoAdmins={MAX_CO_ADMINS}
+            />
+          </div>
+        )}
+
+        {ctx.role === "ORG_ADMIN" && (
+          <div id="confidentialite" className="animate-fade-in-up stagger-4 scroll-mt-20">
+            <PrivacyCard
+              isPrimary={isPrimary}
+              months={organization.dataRetentionMonths}
+              officerName={organization.privacyOfficerName ?? ""}
+              officerEmail={organization.privacyOfficerEmail ?? ""}
+              defaultOfficerName={defaultOfficerName}
+              lastPurgeAt={organization.lastPrivacyPurgeAt?.toISOString() ?? null}
+            />
+          </div>
+        )}
+
+        {ctx.role === "ORG_ADMIN" && (
+          <div id="conges" className="animate-fade-in-up stagger-4 scroll-mt-20">
+            <LeaveTypesCard
+              yearStartMonth={organization.leaveYearStartMonth}
+              types={leaveTypes.map((type) => ({
+                id: type.id,
+                defaultLabel: type.code ? leaveTypeLabel(t, { code: type.code, name: null }) : null,
+                name: type.name ?? "",
+                daysPerYear: type.daysPerYear,
+                color: type.color,
+                isActive: type.isActive,
+              }))}
             />
           </div>
         )}

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { ShieldAlert } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { SignOutButton } from "@/components/dashboard/SignOutButton";
+import { getI18n } from "@/lib/i18n/server";
 
 // ------------------------------------------------------------
 // Affichée quand lib/session-guard.ts (ou lib/auth.ts) détecte qu'une
@@ -19,6 +20,7 @@ export default async function SuspendedPage() {
   // par prudence on ne le laisse pas coincé sur cette page non plus.
   const role = (session.user as { role?: string }).role;
   if (role === "SUPER_ADMIN") redirect("/platform");
+  const { t } = await getI18n();
 
   return (
     <div>
@@ -26,13 +28,10 @@ export default async function SuspendedPage() {
         <ShieldAlert className="h-6 w-6" strokeWidth={1.9} />
       </span>
       <h1 className="mt-5 font-[family-name:var(--font-display)] text-2xl text-[#1C2438]">
-        Accès suspendu
+        {t("auth.suspended.title")}
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-[#5B6478]">
-        L&apos;accès de votre organisation à cette application est
-        actuellement suspendu. Cela arrive généralement en cas de facturation
-        impayée. Contactez votre administrateur pour régulariser la
-        situation — l&apos;accès sera rétabli aussitôt.
+        {t("auth.suspended.body")}
       </p>
       <div className="mt-8">
         <SignOutButton />

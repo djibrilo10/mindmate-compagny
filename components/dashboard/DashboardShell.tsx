@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Role = "SUPER_ADMIN" | "ORG_ADMIN" | "MANAGER" | "EMPLOYEE";
 
@@ -22,6 +23,7 @@ export function DashboardShell({
   children,
 }: DashboardShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] lg:grid lg:grid-cols-[240px_1fr]">
@@ -43,7 +45,7 @@ export function DashboardShell({
             <img src="/api/organization/logo" alt="" aria-hidden className="h-full w-full object-contain" />
           </div>
           <p className="mt-3 text-center text-xs font-medium uppercase tracking-wider text-[#8891A5]">
-            Portail employé
+            {t("shell.portal")}
           </p>
         </div>
         <Sidebar onNavigate={() => setIsSidebarOpen(false)} role={role} />
@@ -51,7 +53,7 @@ export function DashboardShell({
 
       {isSidebarOpen && (
         <button
-          aria-label="Fermer le menu"
+          aria-label={t("shell.closeMenu")}
           onClick={() => setIsSidebarOpen(false)}
           className="animate-fade-in fixed inset-0 z-20 bg-black/30 backdrop-blur-[2px] lg:hidden"
         />

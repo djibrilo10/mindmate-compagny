@@ -1,15 +1,17 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { getI18n } from "@/lib/i18n/server";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const { t } = await getI18n();
   return (
     <div>
       <h1 className="font-[family-name:var(--font-display)] text-3xl text-[#1C2438]">
-        Content de vous revoir
+        {t("auth.login.title")}
       </h1>
       <p className="mt-2 text-sm text-[#5B6478]">
-        Connectez-vous à l&apos;espace de votre organisation.
+        {t("auth.login.subtitle")}
       </p>
 
       <div className="mt-8">
@@ -19,15 +21,15 @@ export default function LoginPage() {
       </div>
 
       <p className="mt-8 text-sm text-[#5B6478]">
-        Pas encore de compte entreprise ?{" "}
+        {t("auth.login.noAccount")}{" "}
         <Link href="/register" className="text-[#2F6F5E] hover:underline">
-          Créez votre organisation
+          {t("auth.login.createOrg")}
         </Link>
       </p>
       <p className="mt-2 text-sm text-[#5B6478]">
-        Vous êtes employé et votre entreprise a déjà un compte ?{" "}
+        {t("auth.login.isEmployee")}{" "}
         <Link href="/join" className="text-[#2F6F5E] hover:underline">
-          Rejoignez-la avec un code d&apos;invitation
+          {t("auth.login.joinWithCode")}
         </Link>
       </p>
     </div>

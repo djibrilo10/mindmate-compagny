@@ -37,6 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!isSurveyOpen(survey)) {
       return Response.json({ error: "Ce sondage est fermé" }, { status: 409 });
     }
+    // Sondage nominatif : avis de confidentialité accepté obligatoire (Loi 25, AUDIT.md 7.28).
+    if (!survey.isAnonymous && body?.privacyAccepted !== true) {
+      return Response.json({ error: "Coche « J'ai compris » dans l'avis de confidentialité" }, { status: 400 });
+    }
 
     // Exactement une réponse par question, et chaque choix doit appartenir
     // à SA question (impossible d'envoyer un optionId d'un autre sondage).
@@ -62,7 +66,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // La contrainte unique (surveyId, userId) bloque un 2e envoi, même
         // simultané (double clic) : la transaction entière est alors annulée.
         const participation = await tx.surveyParticipation.create({
-          data: { organizationId: ctx.organizationId, surveyId: survey.id, userId: ctx.userId },
+          data: {
+            organizationId: ctx.organizationId,
+            surveyId: survey.id,
+            userId: ctx.userId,
+            privacyNoticeAt: survey.isAnonymous ? null : new Date(),
+          },
           select: { id: true },
         });
         await tx.surveyAnswer.createMany({

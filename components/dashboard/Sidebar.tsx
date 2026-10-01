@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "./nav-items";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type Role = "SUPER_ADMIN" | "ORG_ADMIN" | "MANAGER" | "EMPLOYEE";
 const ADMIN_ROLES: Role[] = ["ORG_ADMIN", "SUPER_ADMIN"];
@@ -10,11 +11,13 @@ const MANAGEMENT_ROLES: Role[] = ["ORG_ADMIN", "MANAGER", "SUPER_ADMIN"];
 
 export function Sidebar({ onNavigate, role }: { onNavigate?: () => void; role: Role }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const isAdmin = ADMIN_ROLES.includes(role);
   const isManagement = MANAGEMENT_ROLES.includes(role);
   const visibleItems = navItems.filter((item) => {
     if (item.adminOnly && !isAdmin) return false;
     if (item.managementOnly && !isManagement) return false;
+    if (item.nonAdminOnly && isAdmin) return false;
     return true;
   });
 
@@ -44,7 +47,7 @@ export function Sidebar({ onNavigate, role }: { onNavigate?: () => void; role: R
               }`}
               strokeWidth={1.75}
             />
-            {item.label}
+            {t(item.labelKey)}
           </Link>
         );
       })}

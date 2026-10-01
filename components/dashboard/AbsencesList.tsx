@@ -1,135 +1,126 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Loader2, X } from "lucide-react";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import { formatDays, formatLeaveDates, LEAVE_STATUS_STYLES as STATUS_STYLES } from "@/lib/leave-format";
 
-type AbsenceStatus = "PENDING" | "APPROVED" | "REJECTED";
+// Congés > Mes demandes (voir AUDIT.md 7.30) : statut, décision, annulation.
 
-type Absence = {
+export type MyLeaveRow = {
   id: string;
+  typeLabel: string;
+  color: string;
   startDate: string;
   endDate: string;
-  reason: string;
-  status: AbsenceStatus;
-  createdAt: string;
-  user: { firstName: string; lastName: string } | null;
+  halfDay: string | null;
+  days: number | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  comment: string;
+  decidedByName: string | null;
+  decisionNote: string | null;
+  cancellable: boolean;
 };
 
-const STATUS_LABELS: Record<AbsenceStatus, string> = {
-  PENDING: "En attente",
-  APPROVED: "Approuvée",
-  REJECTED: "Rejetée",
-};
+export function AbsencesList({ rows }: { rows: MyLeaveRow[] }) {
+  const router = useRouter();
+  const i18n = useI18n();
+  const { t, tx } = i18n;
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-const STATUS_STYLES: Record<AbsenceStatus, { className: string; icon: typeof Clock3 }> = {
-  PENDING: { className: "bg-[#FFF4E0] text-[#8A6A1C]", icon: Clock3 },
-  APPROVED: { className: "bg-[#E7F3EF] text-[#2F6F5E]", icon: CheckCircle2 },
-  REJECTED: { className: "bg-[#FDECEC] text-[#8A3B3B]", icon: XCircle },
-};
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("fr-CA");
-}
-
-export function AbsencesList({
-  initialAbsences,
-  canManage,
-}: {
-  initialAbsences: Absence[];
-  canManage: boolean;
-}) {
-  const [absences, setAbsences] = useState(initialAbsences);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-
-  async function updateStatus(id: string, status: "APPROVED" | "REJECTED") {
-    const previous = absences;
-    setUpdatingId(id);
-    setAbsences((current) => current.map((a) => (a.id === id ? { ...a, status } : a)));
-
+  async function cancel(id: string) {
+    setBusyId(id);
+    setError("");
     try {
-      const response = await fetch(`/api/absences/${id}`, {
+      const res = await fetch(`/api/absences/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ action: "cancel" }),
       });
-      if (!response.ok) throw new Error();
-    } catch {
-      // On annule le changement optimiste si la requête échoue côté serveur.
-      setAbsences(previous);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ? tx(data.error) : t("common.operationFailed"));
+      setConfirmId(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("common.unknownError"));
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   }
 
-  if (absences.length === 0) {
-    return (
-      <div className="animate-fade-in-up stagger-2 flex flex-col items-center gap-2 rounded-xl border border-dashed border-[#E2E4E9] bg-white px-6 py-14 text-center">
-        <CalendarDays className="h-6 w-6 text-[#B7BECC]" strokeWidth={1.6} />
-        <p className="text-sm text-[#5B6478]">
-          {canManage
-            ? "Aucune demande d'absence pour le moment."
-            : "Tu n'as encore déclaré aucune absence."}
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {absences.map((absence, index) => {
-        const status = STATUS_STYLES[absence.status];
-        const StatusIcon = status.icon;
-        return (
-          <div
-            key={absence.id}
-            style={{ animationDelay: `${Math.min(index, 10) * 0.04}s` }}
-            className="animate-fade-in-up rounded-xl border border-[#E2E4E9] bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                {canManage && absence.user && (
-                  <p className="text-sm font-medium text-[#1C2438]">
-                    {absence.user.firstName} {absence.user.lastName}
+    <section className="rounded-xl border border-[#E2E4E9] bg-white shadow-sm">
+      <h2 className="border-b border-[#E2E4E9] px-5 py-3 font-[family-name:var(--font-display)] text-base text-[#1C2438]">
+        {t("leave.mine.title")}
+      </h2>
+      {error && (
+        <p className="mx-5 mt-3 flex items-center gap-1 text-sm text-[#8A3B3B]" role="alert">
+          <AlertCircle className="h-4 w-4" /> {error}
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-[#9AA1B2]">{t("leave.mine.empty")}</p>
+      ) : (
+        <ul className="divide-y divide-[#E2E4E9]">
+          {rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-start gap-3 px-5 py-3">
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: r.color }} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-[#1C2438]">
+                  {r.typeLabel}
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[r.status]}`}>
+                    {t(`leave.status.${r.status}`)}
+                  </span>
+                </p>
+                <p className="text-sm text-[#5B6478]">
+                  {formatLeaveDates(i18n, r.startDate, r.endDate, r.halfDay)}
+                  {r.days != null && ` · ${formatDays(i18n, r.days)}`}
+                </p>
+                {r.comment && <p className="mt-0.5 text-xs text-[#9AA1B2]">« {r.comment} »</p>}
+                {r.decidedByName && (r.status === "APPROVED" || r.status === "REJECTED") && (
+                  <p className="mt-0.5 text-xs text-[#5B6478]">
+                    {t("leave.mine.decidedBy", { name: r.decidedByName })}
+                    {r.decisionNote ? ` · ${t("leave.mine.note", { note: r.decisionNote })}` : ""}
                   </p>
                 )}
-                <p className="mt-1 text-sm text-[#5B6478]">
-                  Du {formatDate(absence.startDate)} au {formatDate(absence.endDate)}
-                </p>
-                <p className="mt-1 text-sm text-[#5B6478]">{absence.reason}</p>
               </div>
-
-              <div className="flex flex-col items-end gap-2">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}
-                >
-                  <StatusIcon className="h-3 w-3" strokeWidth={2} />
-                  {STATUS_LABELS[absence.status]}
-                </span>
-                {canManage && absence.status === "PENDING" && (
-                  <div className="flex gap-2">
+              {r.cancellable &&
+                (confirmId === r.id ? (
+                  <span className="flex items-center gap-2">
                     <button
-                      onClick={() => updateStatus(absence.id, "APPROVED")}
-                      disabled={updatingId === absence.id}
-                      className="inline-flex items-center gap-1 rounded-md border border-[#2F6F5E] px-2 py-1 text-xs font-medium text-[#2F6F5E] transition-colors hover:bg-[#E7F3EF] disabled:opacity-50"
+                      type="button"
+                      onClick={() => cancel(r.id)}
+                      disabled={busyId === r.id}
+                      className="inline-flex items-center gap-1 rounded-md bg-[#C2542C] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#A8451F] disabled:opacity-60"
                     >
-                      <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
-                      Approuver
+                      {busyId === r.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {t("leave.mine.confirmCancel")}
                     </button>
                     <button
-                      onClick={() => updateStatus(absence.id, "REJECTED")}
-                      disabled={updatingId === absence.id}
-                      className="inline-flex items-center gap-1 rounded-md border border-[#8A3B3B] px-2 py-1 text-xs font-medium text-[#8A3B3B] transition-colors hover:bg-[#FDECEC] disabled:opacity-50"
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      aria-label={t("common.close")}
+                      className="text-[#5B6478] hover:text-[#1C2438]"
                     >
-                      <XCircle className="h-3 w-3" strokeWidth={2} />
-                      Rejeter
+                      <X className="h-4 w-4" />
                     </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(r.id)}
+                    className="rounded-md border border-[#DADEE5] px-2.5 py-1.5 text-xs font-medium text-[#5B6478] hover:border-[#C2542C] hover:text-[#C2542C]"
+                  >
+                    {t("leave.mine.cancel")}
+                  </button>
+                ))}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

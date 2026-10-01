@@ -6,6 +6,7 @@ import type { Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { getI18n } from "@/lib/i18n/server";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -67,8 +68,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     redirect("/suspended");
   }
 
-  const userLabel = user.name || user.email || "Mon compte";
-  const organizationName = organization?.name || "Votre organisation";
+  const { t } = await getI18n();
+  const userLabel = user.name || user.email || t("shell.myAccount");
+  const organizationName = organization?.name || t("shell.yourOrganization");
   // Rôle lu en base (pas dans le token) : un employé promu co-admin voit
   // tout de suite les menus admin, un co-admin retiré les perd tout de suite.
   const role = dbUser.role;
