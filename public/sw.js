@@ -7,7 +7,7 @@
 // Choix assumé : pas de vraie navigation hors-ligne dans l'app, seulement un
 // écran "pas de connexion" propre à la place de l'écran d'erreur du navigateur.
 
-const CACHE_NAME = "pe-shell-v1";
+const CACHE_NAME = "pe-shell-v2"; // v2 : nouveau logo « Équipe » (3 oct. 2026), force le rafraîchissement des icônes en cache
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [OFFLINE_URL, "/icon-192.png", "/icon-512.png"];
 
