@@ -1077,6 +1077,9 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 
 - **Nouveau logo « Équipe »** (trois personnes reliées en cercle), choisi par l'utilisateur pour remplacer le monogramme « DN » (ses initiales). Fichiers remplacés sous le même nom (aucun changement de code) : `public/{icon-192,icon-512,icon-maskable-512,apple-touch-icon,logo-mark-white,logo-mark-black}.png`, `app/favicon.ico`. Ajouté : `public/logo-mindmate.svg` (source vectorielle, vert #2F6F5E). `public/sw.js` : `CACHE_NAME` passé à `pe-shell-v2` pour forcer le rafraîchissement des icônes en cache. Les logos propres à chaque organisation (7.19) restent prioritaires.
 
+### 5 octobre 2026
+- **Connexion mobile refusée (« Entrez une adresse courriel valide ») pour les comptes admin**, signalée de nouveau par l'utilisateur malgré le `.trim()` du 27 sept. Le `.trim()` n'enlève que les espaces en début/fin ; les claviers mobiles peuvent aussi insérer des espaces au milieu, des espaces insécables / caractères invisibles ou des majuscules, et `.email()` (format strict de zod) rejetait aussi toute adresse de compte au format atypique. **Corrigé** : nouvelle fonction `normalizeLoginEmail()` (`lib/validations/auth.ts`, NFKC + retrait de tous les espaces/caractères invisibles + minuscules), utilisée par `loginSchema` (qui n'exige plus qu'un « @ » ; c'est le serveur qui dit si le compte existe) et par `authorize()` dans `lib/auth.ts`. `LoginForm.tsx` envoie maintenant les valeurs nettoyées et désactive majuscule auto / correction / vérification orthographique sur les champs courriel et identifiant d'entreprise. Inscription et auto-inscription inchangées (format strict conservé). Aucune migration.
+
 ## 14. Refonte esthétique (en cours)
 
 ### Contexte

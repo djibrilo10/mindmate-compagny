@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import { verifyPassword } from "./password";
+import { normalizeLoginEmail } from "./validations/auth";
 
 // ------------------------------------------------------------
 // POINT CRITIQUE MULTI-TENANT :
@@ -66,7 +67,7 @@ export const authOptions: NextAuthOptions = {
           where: {
             organizationId_email: {
               organizationId: organization.id,
-              email: credentials.email.toLowerCase().trim(),
+              email: normalizeLoginEmail(credentials.email), // même nettoyage que le formulaire (AUDIT.md, 5 oct. 2026)
             },
           },
         });

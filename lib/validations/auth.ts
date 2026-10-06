@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+// Nettoie une adresse saisie à la connexion (surtout sur téléphone) :
+// forme Unicode normale, retrait de TOUS les espaces et caractères invisibles
+// (espaces insécables, zero-width, etc.), minuscules. Utilisé côté client
+// (loginSchema) ET côté serveur (lib/auth.ts, authorize()).
+export function normalizeLoginEmail(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\s\u00A0\u200B-\u200D\u2060\uFEFF]/g, "")
+    .toLowerCase();
+}
+
 // Les messages sont des CLÉS de traduction (lib/i18n/messages, AUDIT.md 7.29) :
 // traduites par tx() dans les formulaires et par t() dans les routes API.
 
@@ -31,7 +42,15 @@ export const loginSchema = z.object({
   // saisie, invisible à l'œil, qui faisait échouer la validation même pour une
   // adresse par ailleurs correcte (ex. un alias "+admin@..." plus long, donc
   // plus susceptible de déclencher l'auto-complétion) — voir AUDIT.md.
-  email: z.string().trim().email("validation.emailInvalid"),
+  // Connexion : on ne revalide PAS le format strict de l'adresse (5 oct. 2026,
+  // voir AUDIT.md) — c'est le serveur qui dit si le compte existe. Les claviers
+  // mobiles ajoutent des espaces (même au milieu, ex. après « + »), des
+  // majuscules ou des caractères Unicode invisibles ; on les nettoie avec
+  // normalizeLoginEmail() et on exige seulement la présence d'un « @ ».
+  email: z
+    .string()
+    .transform(normalizeLoginEmail)
+    .refine((v) => /^[^@]+@[^@]+$/.test(v), "validation.emailInvalid"),
   password: z.string().min(1, "validation.passwordRequired"),
 });
 

@@ -50,8 +50,8 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       const result = await signIn("credentials", {
-        organizationSlug: values.organizationSlug,
-        email: values.email,
+        organizationSlug: parsed.data.organizationSlug.trim(),
+        email: parsed.data.email, // adresse déjà nettoyée par loginSchema
         password: values.password,
         redirect: false,
       });
@@ -84,6 +84,9 @@ export function LoginForm() {
         error={errors.organizationSlug}
         placeholder={t("auth.placeholders.organizationSlug")}
         autoComplete="organization"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
       />
       <FormField
         label={t("auth.fields.email")}
@@ -95,6 +98,10 @@ export function LoginForm() {
         error={errors.email}
         placeholder={t("auth.placeholders.email")}
         autoComplete="email"
+        inputMode="email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
       />
       <FormField
         label={t("auth.fields.password")}
