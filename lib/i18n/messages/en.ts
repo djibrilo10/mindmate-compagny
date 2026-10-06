@@ -97,6 +97,30 @@ export const en: Messages = {
       createOrg: "Create your organization",
       isEmployee: "Are you an employee and your company already has an account?",
       joinWithCode: "Join it with an invitation code",
+      forgotPassword: "Forgot your password?",
+      passwordReset: "Password changed. You can now sign in with your new password.",
+    },
+    forgot: {
+      title: "Forgot your password",
+      subtitle: "Enter your company ID and your email: we'll send you a link to choose a new password.",
+      submit: "Send the link",
+      submitting: "Sending…",
+      sentTitle: "Check your email",
+      sentBody: "If an account matches this information, you'll receive a link within a few minutes. It's valid for 1 hour. Remember to check your spam folder.",
+      noEmailAccess: "No access to this email? Ask your administrator to create a reset link for you from the Employees page.",
+      backToLogin: "Back to sign in",
+    },
+    reset: {
+      title: "New password",
+      subtitle: "Choose a new password for your account.",
+      newPassword: "New password",
+      confirmPassword: "Confirm the password",
+      confirmPlaceholder: "Type the same password again",
+      submit: "Save the password",
+      submitting: "Saving…",
+      invalidTitle: "This link no longer works",
+      invalidBody: "The link has expired or has already been used. For your security, each link works only once. Request a new one.",
+      requestNew: "Request a new link",
     },
     register: {
       title: "Create your company's space",
@@ -134,6 +158,9 @@ export const en: Messages = {
     passwordRequired: "Enter your password",
     slugRequired: "Enter your company ID",
     inviteCodeRequired: "Enter the invitation code from your administrator",
+    passwordMax: "This password is too long",
+    passwordMismatch: "The two passwords don't match",
+    resetLinkInvalid: "This link has expired or has already been used. Request a new one.",
   },
 
   errors: {
@@ -146,6 +173,19 @@ export const en: Messages = {
     emailTakenInOrg: "An account with this email already exists in this company.",
     accountCreateFailed: "Unable to create the account. Please try again in a moment.",
     orgSuspended: "This organization is suspended. Contact your administrator.",
+    serverError: "Server error. Please try again in a moment.",
+  },
+
+  email: {
+    reset: {
+      subject: "Reset your Mindmate password",
+      greeting: "Hi {name},",
+      intro: "You asked to change your password for {organization}. Click the button to choose a new one.",
+      button: "Choose a new password",
+      expires: "This link is valid for 1 hour and works only once.",
+      ignore: "If you didn't ask for this, ignore this email: your current password stays the same.",
+      footer: "Mindmate Compagny — employee portal",
+    },
   },
 
   dashboard: {
@@ -361,6 +401,12 @@ export const en: Messages = {
       reactivate: "Reactivate",
       confirmDisable: "Disable this account? The person won't be able to sign in anymore, but their history is kept.",
       managedInSettings: "Managed in Settings",
+      resetLink: "Password link",
+      resetLinkTooltip: "Create a link so this person can choose a new password",
+      resetLinkTitle: "Reset link for {name}",
+      resetLinkHelp: "Send this link to the person (text, email…). They'll choose their new password themselves. Valid until {date}, once. Creating a new link cancels this one.",
+      resetLinkCopy: "Copy the link",
+      resetLinkCopied: "Copied",
       empty: "No employees yet.",
       noMatch: "No employee matches your search.",
       count: { one: "{count} person", other: "{count} people" },

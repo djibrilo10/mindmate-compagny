@@ -66,6 +66,8 @@ export type AuditAction =
   | "DEPARTMENT_MANAGER_REMOVED"
   | "USER_DEPARTMENT_CHANGED"
   | "USER_DEPARTMENT_CHOSEN"
+  | "USER_PASSWORD_RESET"
+  | "USER_PASSWORD_RESET_LINK_CREATED"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -159,6 +161,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   DEPARTMENT_MANAGER_REMOVED: "a retiré un responsable de département",
   USER_DEPARTMENT_CHANGED: "a changé le département d'employés",
   USER_DEPARTMENT_CHOSEN: "a choisi son département",
+  USER_PASSWORD_RESET: "a changé son mot de passe (mot de passe oublié)",
+  USER_PASSWORD_RESET_LINK_CREATED: "a créé un lien de réinitialisation de mot de passe pour un employé",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };

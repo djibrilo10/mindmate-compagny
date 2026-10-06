@@ -77,6 +77,36 @@ export const joinSchema = z.object({
     .regex(/[0-9]/, "validation.passwordDigit"),
 });
 
+// « Mot de passe oublié » (AUDIT.md 7.35). Comme à la connexion, l'adresse
+// est nettoyée (claviers mobiles) et l'identifiant d'entreprise est requis,
+// car un même courriel peut exister dans deux entreprises différentes.
+export const forgotPasswordSchema = z.object({
+  organizationSlug: z.string().trim().min(1, "validation.slugRequired"),
+  email: z
+    .string()
+    .transform(normalizeLoginEmail)
+    .refine((v) => /^[^@]+@[^@]+$/.test(v), "validation.emailInvalid"),
+});
+
+// Nouveau mot de passe : mêmes règles qu'à l'inscription.
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "validation.resetLinkInvalid"),
+    password: z
+      .string()
+      .min(8, "validation.passwordMin")
+      .max(200, "validation.passwordMax")
+      .regex(/[A-Z]/, "validation.passwordUppercase")
+      .regex(/[0-9]/, "validation.passwordDigit"),
+    confirmPassword: z.string(),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    message: "validation.passwordMismatch",
+    path: ["confirmPassword"],
+  });
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type JoinInput = z.infer<typeof joinSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

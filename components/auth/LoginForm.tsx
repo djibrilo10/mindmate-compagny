@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Building2, Loader2, Lock, Mail } from "lucide-react";
@@ -16,6 +17,7 @@ export function LoginForm() {
   const { t, tx } = useI18n();
   const params = useSearchParams();
   const justRegistered = params.get("registered") === "1";
+  const justReset = params.get("reset") === "1"; // retour de « Mot de passe oublié » (AUDIT.md 7.35)
   const prefilledSlug = params.get("slug") ?? "";
 
   const [values, setValues] = useState<Values>({
@@ -69,6 +71,11 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+      {justReset && (
+        <p className="animate-scale-in rounded-lg bg-[#EAF3F0] px-3 py-2.5 text-sm text-[#265A4C]">
+          {t("auth.login.passwordReset")}
+        </p>
+      )}
       {justRegistered && (
         <p className="animate-scale-in rounded-lg bg-[#EAF3F0] px-3 py-2.5 text-sm text-[#265A4C]">
           {t("auth.login.registered", { slug: prefilledSlug })}
@@ -114,6 +121,12 @@ export function LoginForm() {
         placeholder={t("auth.placeholders.password")}
         autoComplete="current-password"
       />
+      <Link
+        href={`/forgot-password${values.organizationSlug.trim() ? `?slug=${encodeURIComponent(values.organizationSlug.trim())}` : ""}`}
+        className="-mt-3 self-end text-xs text-[#2F6F5E] hover:underline"
+      >
+        {t("auth.login.forgotPassword")}
+      </Link>
 
       {errors.form && (
         <p className="animate-fade-in text-sm text-[#C2542C]" role="alert">

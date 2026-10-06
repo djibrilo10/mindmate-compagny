@@ -98,6 +98,30 @@ export const fr = {
       createOrg: "Créez votre organisation",
       isEmployee: "Vous êtes employé et votre entreprise a déjà un compte ?",
       joinWithCode: "Rejoignez-la avec un code d'invitation",
+      forgotPassword: "Mot de passe oublié ?",
+      passwordReset: "Mot de passe modifié. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+    },
+    forgot: {
+      title: "Mot de passe oublié",
+      subtitle: "Entrez l'identifiant de votre entreprise et votre courriel : nous vous enverrons un lien pour choisir un nouveau mot de passe.",
+      submit: "Envoyer le lien",
+      submitting: "Envoi…",
+      sentTitle: "Vérifiez vos courriels",
+      sentBody: "Si un compte correspond à ces informations, vous recevrez un lien dans quelques minutes. Il est valide pendant 1 heure. Pensez à regarder dans les courriels indésirables.",
+      noEmailAccess: "Pas accès à ce courriel ? Demandez à votre administrateur de vous générer un lien de réinitialisation depuis la page Employés.",
+      backToLogin: "Retour à la connexion",
+    },
+    reset: {
+      title: "Nouveau mot de passe",
+      subtitle: "Choisissez un nouveau mot de passe pour votre compte.",
+      newPassword: "Nouveau mot de passe",
+      confirmPassword: "Confirmez le mot de passe",
+      confirmPlaceholder: "Retapez le même mot de passe",
+      submit: "Enregistrer le mot de passe",
+      submitting: "Enregistrement…",
+      invalidTitle: "Ce lien ne fonctionne plus",
+      invalidBody: "Le lien a expiré ou a déjà été utilisé. Pour votre sécurité, chaque lien ne sert qu'une seule fois. Demandez-en un nouveau.",
+      requestNew: "Demander un nouveau lien",
     },
     register: {
       title: "Créez l'espace de votre entreprise",
@@ -137,6 +161,9 @@ export const fr = {
     passwordRequired: "Entrez votre mot de passe",
     slugRequired: "Entrez l'identifiant de votre entreprise",
     inviteCodeRequired: "Entrez le code d'invitation fourni par votre administrateur",
+    passwordMax: "Ce mot de passe est trop long",
+    passwordMismatch: "Les deux mots de passe ne sont pas identiques",
+    resetLinkInvalid: "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
   },
 
   errors: {
@@ -149,6 +176,20 @@ export const fr = {
     emailTakenInOrg: "Un compte existe déjà avec ce courriel dans cette entreprise.",
     accountCreateFailed: "Impossible de créer le compte. Réessayez dans un instant.",
     orgSuspended: "Cette organisation est suspendue. Contactez votre administrateur.",
+    serverError: "Erreur du serveur. Réessayez dans un instant.",
+  },
+
+  // Courriels envoyés par l'application (AUDIT.md 7.35).
+  email: {
+    reset: {
+      subject: "Réinitialiser ton mot de passe Mindmate",
+      greeting: "Bonjour {name},",
+      intro: "Tu as demandé à changer ton mot de passe pour {organization}. Clique sur le bouton pour en choisir un nouveau.",
+      button: "Choisir un nouveau mot de passe",
+      expires: "Ce lien est valide pendant 1 heure et ne fonctionne qu'une seule fois.",
+      ignore: "Si tu n'as rien demandé, ignore ce courriel : ton mot de passe actuel reste le même.",
+      footer: "Mindmate Compagny — portail employé",
+    },
   },
 
   dashboard: {
@@ -364,6 +405,12 @@ export const fr = {
       reactivate: "Réactiver",
       confirmDisable: "Désactiver ce compte ? La personne ne pourra plus se connecter, mais son historique est conservé.",
       managedInSettings: "Géré dans Paramètres",
+      resetLink: "Lien mot de passe",
+      resetLinkTooltip: "Créer un lien pour que la personne choisisse un nouveau mot de passe",
+      resetLinkTitle: "Lien de réinitialisation pour {name}",
+      resetLinkHelp: "Envoie ce lien à la personne (texto, courriel…). Elle choisira elle-même son nouveau mot de passe. Valide jusqu'au {date}, une seule fois. Créer un nouveau lien annule celui-ci.",
+      resetLinkCopy: "Copier le lien",
+      resetLinkCopied: "Copié",
       empty: "Aucun employé pour le moment.",
       noMatch: "Aucun employé ne correspond à ta recherche.",
       count: { one: "{count} personne", other: "{count} personnes" },

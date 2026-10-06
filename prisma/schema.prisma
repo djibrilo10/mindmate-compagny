@@ -226,6 +226,7 @@ model User {
   supportMessages      SupportMessage[]      @relation("SupportMessageSender")
   departures           Departure[]           @relation("DepartureEmployee")
   departuresRecorded   Departure[]           @relation("DepartureRecorder")
+  passwordResetTokens  PasswordResetToken[]
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -792,4 +793,24 @@ model AuditLog {
 
   @@index([organizationId])
   @@map("audit_logs")
+}
+
+// ------------------------------------------------------------
+// PASSWORD RESET TOKEN — « Mot de passe oublié » (voir AUDIT.md 7.35)
+// Lien à usage unique : par courriel (1 h) ou généré par un admin (24 h).
+// On ne stocke JAMAIS le jeton en clair, seulement son empreinte SHA-256 :
+// une fuite de la base ne permet pas de réinitialiser un compte.
+// ------------------------------------------------------------
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?   // admin qui a généré le lien (null = demande par courriel)
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

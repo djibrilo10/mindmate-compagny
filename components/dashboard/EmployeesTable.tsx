@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2, Search, UserX, XCircle } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Copy, KeyRound, Loader2, Search, UserX, X, XCircle } from "lucide-react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 import type { MessageKey } from "@/lib/i18n/translator";
@@ -49,6 +49,10 @@ export function EmployeesTable({
   const [busy, setBusy] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  // Lien de réinitialisation du mot de passe généré par l'admin (AUDIT.md 7.35).
+  const [resetLink, setResetLink] = useState<{ name: string; url: string; expiresAt: string } | null>(null);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -106,6 +110,32 @@ export function EmployeesTable({
       setEmployees(previous);
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  async function createResetLink(employee: Employee) {
+    setLinkingId(employee.id);
+    setMessage(null);
+    setCopied(false);
+    try {
+      const res = await fetch(`/api/users/${employee.id}/reset-link`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.url !== "string") throw new Error(data?.error ? tx(data.error) : t("common.operationFailed"));
+      setResetLink({ name: `${employee.firstName} ${employee.lastName}`, url: data.url, expiresAt: data.expiresAt });
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : t("common.unknownError") });
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
+  async function copyResetLink() {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(resetLink.url);
+      setCopied(true);
+    } catch {
+      // Presse-papiers bloqué (ancien navigateur) : le lien reste sélectionnable à la main.
     }
   }
 
@@ -187,8 +217,45 @@ export function EmployeesTable({
         </p>
       )}
 
+      {resetLink && (
+        <div className="animate-scale-in rounded-xl border border-[#2F6F5E]/30 bg-[#F3F9F7] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#2F6F5E]" strokeWidth={2} />
+              <div>
+                <p className="text-sm font-medium text-[#1C2438]">{t("departments.employees.resetLinkTitle", { name: resetLink.name })}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-[#5B6478]">
+                  {t("departments.employees.resetLinkHelp", {
+                    date: formatDate(resetLink.expiresAt, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+                  })}
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setResetLink(null)} aria-label={t("common.close")} className="rounded-md p-1 text-[#5B6478] hover:bg-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              readOnly
+              value={resetLink.url}
+              onFocus={(ev) => ev.target.select()}
+              className="min-w-0 flex-1 rounded-md border border-[#C7CBD6] bg-white px-2.5 py-1.5 font-mono text-xs text-[#1C2438]"
+            />
+            <button
+              type="button"
+              onClick={copyResetLink}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#2F6F5E] px-3 py-1.5 text-xs font-medium text-white"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? t("departments.employees.resetLinkCopied") : t("departments.employees.resetLinkCopy")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-xl border border-[#E2E4E9] bg-white shadow-sm">
-        <table className="w-full min-w-[820px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-[#F7F8FA] text-xs uppercase tracking-wide text-[#5B6478]">
             <tr>
               {canManage && (
@@ -301,13 +368,24 @@ export function EmployeesTable({
                       ) : isAdminAccount ? (
                         <span className="text-xs text-[#9AA1B2]">{t("departments.employees.managedInSettings")}</span>
                       ) : e.status === "ACTIVE" ? (
-                        <button
-                          onClick={() => toggleStatus(e.id, "DISABLED")}
-                          disabled={updatingId === e.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-[#8A3B3B] px-2 py-1 text-xs font-medium text-[#8A3B3B] hover:bg-[#FDECEC] disabled:opacity-50"
-                        >
-                          <UserX className="h-3 w-3" strokeWidth={2} /> {t("departments.employees.disable")}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            onClick={() => createResetLink(e)}
+                            disabled={linkingId === e.id}
+                            title={t("departments.employees.resetLinkTooltip")}
+                            className="inline-flex items-center gap-1 rounded-md border border-[#C7CBD6] px-2 py-1 text-xs font-medium text-[#1C2438] hover:bg-[#F7F8FA] disabled:opacity-50"
+                          >
+                            {linkingId === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" strokeWidth={2} />}
+                            {t("departments.employees.resetLink")}
+                          </button>
+                          <button
+                            onClick={() => toggleStatus(e.id, "DISABLED")}
+                            disabled={updatingId === e.id}
+                            className="inline-flex items-center gap-1 rounded-md border border-[#8A3B3B] px-2 py-1 text-xs font-medium text-[#8A3B3B] hover:bg-[#FDECEC] disabled:opacity-50"
+                          >
+                            <UserX className="h-3 w-3" strokeWidth={2} /> {t("departments.employees.disable")}
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={() => toggleStatus(e.id, "ACTIVE")}
