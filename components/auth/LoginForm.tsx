@@ -96,16 +96,15 @@ export function LoginForm() {
         spellCheck={false}
       />
       <FormField
-        label={t("auth.fields.email")}
+        label={t("auth.fields.emailOrPhone")}
         name="email"
-        type="email"
+        type="text"
         icon={Mail}
         value={values.email}
         onChange={handleChange("email")}
         error={errors.email}
-        placeholder={t("auth.placeholders.email")}
-        autoComplete="email"
-        inputMode="email"
+        placeholder={t("auth.placeholders.emailOrPhone")}
+        autoComplete="username"
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}

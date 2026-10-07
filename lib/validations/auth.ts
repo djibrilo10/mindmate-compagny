@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { looksLikeEmail, normalizePhone } from "@/lib/phone";
 
 // Nettoie une adresse saisie à la connexion (surtout sur téléphone) :
 // forme Unicode normale, retrait de TOUS les espaces et caractères invisibles
@@ -47,12 +48,24 @@ export const loginSchema = z.object({
   // mobiles ajoutent des espaces (même au milieu, ex. après « + »), des
   // majuscules ou des caractères Unicode invisibles ; on les nettoie avec
   // normalizeLoginEmail() et on exige seulement la présence d'un « @ ».
+  // Depuis AUDIT.md 7.40, ce champ accepte un COURRIEL ou un NUMÉRO DE
+  // TÉLÉPHONE (nom de propriété « email » conservé pour ne rien casser) :
+  // avec un « @ » -> courriel nettoyé ; sinon -> téléphone normalisé (+1...).
   email: z
     .string()
-    .transform(normalizeLoginEmail)
-    .refine((v) => /^[^@]+@[^@]+$/.test(v), "validation.emailInvalid"),
+    .transform(normalizeLoginIdentifier)
+    .refine((v) => v.length > 0, "validation.identifierInvalid"),
   password: z.string().min(1, "validation.passwordRequired"),
 });
+
+/** Courriel nettoyé, ou téléphone au format +1..., ou "" si illisible. */
+export function normalizeLoginIdentifier(value: string): string {
+  if (looksLikeEmail(value)) {
+    const email = normalizeLoginEmail(value);
+    return /^[^@]+@[^@]+$/.test(email) ? email : "";
+  }
+  return normalizePhone(value) ?? "";
+}
 
 // Auto-inscription d'un employé via le code d'invitation de son
 // organisation (voir lib/invite-code.ts et AUDIT.md 7.18). Mêmes règles de
@@ -69,13 +82,23 @@ export const joinSchema = z.object({
     .string()
     .min(1, "validation.lastNameRequired")
     .max(50, "validation.lastNameMax"),
-  email: z.string().trim().email("validation.emailInvalid"),
+  // Courriel OU téléphone (au moins un des deux), AUDIT.md 7.40.
+  email: z
+    .string()
+    .trim()
+    .default("")
+    .refine((v) => v === "" || z.string().email().safeParse(v).success, "validation.emailInvalid"),
+  phone: z
+    .string()
+    .trim()
+    .default("")
+    .refine((v) => v === "" || normalizePhone(v) !== null, "validation.phoneInvalid"),
   password: z
     .string()
     .min(8, "validation.passwordMin")
     .regex(/[A-Z]/, "validation.passwordUppercase")
     .regex(/[0-9]/, "validation.passwordDigit"),
-});
+}).refine((v) => v.email !== "" || v.phone !== "", { message: "validation.emailOrPhoneRequired", path: ["phone"] });
 
 // « Mot de passe oublié » (AUDIT.md 7.35). Comme à la connexion, l'adresse
 // est nettoyée (claviers mobiles) et l'identifiant d'entreprise est requis,

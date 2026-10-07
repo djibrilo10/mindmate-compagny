@@ -78,6 +78,9 @@ export const en: Messages = {
       email: "Email",
       password: "Password",
       inviteCode: "Invitation code",
+      phone: "Phone number",
+      emailOptional: "Email (optional)",
+      emailOrPhone: "Email or phone number",
     },
     placeholders: {
       organizationSlug: "company-a-inc",
@@ -86,6 +89,8 @@ export const en: Messages = {
       emailExample: "alex@companya.com",
       password: "Your password",
       newPassword: "8 characters, one uppercase, one digit",
+      phone: "514-555-1234",
+      emailOrPhone: "you@company.com or 514-555-1234",
     },
     login: {
       title: "Welcome back",
@@ -108,7 +113,7 @@ export const en: Messages = {
       submitting: "Sending…",
       sentTitle: "Check your email",
       sentBody: "If an account matches this information, you'll receive a link within a few minutes. It's valid for 1 hour. Remember to check your spam folder.",
-      noEmailAccess: "No access to this email? Ask your administrator to create a reset link for you from the Employees page.",
+      noEmailAccess: "No access to this email, or an account with only a phone number? Ask your administrator to create a reset link for you from the Employees page.",
       backToLogin: "Back to sign in",
     },
     reset: {
@@ -138,6 +143,7 @@ export const en: Messages = {
       submitting: "Creating…",
       isAdmin: "Are you an administrator who wants to create your company's space?",
       registerOrg: "Register your company",
+      emailOrPhone: "Give your phone number, your email, or both: you'll be able to sign in with either.",
     },
     suspended: {
       title: "Access suspended",
@@ -161,6 +167,9 @@ export const en: Messages = {
     inviteCodeRequired: "Enter the invitation code from your administrator",
     passwordMax: "This password is too long",
     passwordMismatch: "The two passwords don't match",
+    identifierInvalid: "Enter a valid email or phone number",
+    phoneInvalid: "Invalid phone number (e.g. 514-555-1234)",
+    emailOrPhoneRequired: "Enter at least a phone number or an email",
     resetLinkInvalid: "This link has expired or has already been used. Request a new one.",
   },
 
@@ -175,6 +184,7 @@ export const en: Messages = {
     accountCreateFailed: "Unable to create the account. Please try again in a moment.",
     orgSuspended: "This organization is suspended. Contact your administrator.",
     serverError: "Server error. Please try again in a moment.",
+    phoneTakenInOrg: "An account with this phone number already exists in this company.",
   },
 
   email: {
@@ -402,6 +412,17 @@ export const en: Messages = {
       reactivate: "Reactivate",
       confirmDisable: "Disable this account? The person won't be able to sign in anymore, but their history is kept.",
       managedInSettings: "Managed in Settings",
+      contact: "Email / phone",
+      phone: {
+        title: "Phone number",
+        add: "Add a number",
+        edit: "Change the number",
+        help: "This person will be able to sign in with this number and their password. Leave empty to remove the number.",
+        saved: "Number saved.",
+        removed: "Number removed.",
+        notFound: "Employee not found.",
+        needOneLogin: "This account has no email: keep a number so the person can sign in.",
+      },
       resetLink: "Password link",
       resetLinkTooltip: "Create a link so this person can choose a new password",
       resetLinkTitle: "Reset link for {name}",

@@ -933,6 +933,16 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - **API** : `POST /api/schedule-files` (multipart), `GET|DELETE /api/schedule-files/[id]`. Historique : `SCHEDULE_FILE_UPLOADED`, `SCHEDULE_FILE_DELETED`.
 - Le contenu du fichier n'est pas converti en quarts (lecture automatique d'un Excel libre trop peu fiable) : piste possible plus tard avec un modèle Excel imposé.
 
+### 7.40 Connexion par numéro de téléphone (10 oct. 2026)
+
+À la demande explicite de l'utilisateur (choix : téléphone + mot de passe, sans texto payant ; courriel facultatif).
+- **Base** : `User.email` devient facultatif ; nouveau `User.phone` (format international « +15145551234 »), unique par entreprise (`@@unique([organizationId, phone])`). Normalisation dans `lib/phone.ts` (saisie libre : « 514 555-1234 », « (514) 555 1234 », « +33 6… » ; 10 chiffres = Amérique du Nord).
+- **Connexion** : le champ devient « Courriel ou numéro de téléphone ». Avec un « @ » -> courriel, sinon -> téléphone (`normalizeLoginIdentifier`, utilisé par le formulaire ET `authorize()`).
+- **Inscription par code d'invitation** : téléphone et/ou courriel (au moins un) ; doublons refusés pour chacun.
+- **Page Employés** : colonne « Courriel / téléphone » ; l'admin ajoute, change ou retire le numéro d'un employé (`PATCH /api/users/[id]/phone`, historique `USER_PHONE_UPDATED`) ; un compte sans courriel doit garder un numéro.
+- **Mot de passe oublié** : par courriel seulement ; un compte « téléphone seulement » passe par le lien créé par l'admin (7.35), le texte d'aide le dit.
+- Code rendu sûr pour un courriel absent : exports (+ colonne Téléphone), équipe d'administration, enregistrement d'un départ, recherche des employés.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1145,6 +1155,9 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 
 ### 9 octobre 2026
 - **Horaires — téléverser un horaire en fichier** (7.39), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261009120000_add_schedule_files`). Nouveaux : `lib/{schedule-files,schedule-file-types}.ts`, `app/api/schedule-files/route.ts`, `app/api/schedule-files/[id]/route.ts`, `components/dashboard/ScheduleFilesList.tsx`. Modifiés : `prisma/schema.prisma` (modèle `ScheduleFile`), `middleware.ts`, `lib/activity-log.ts`, `lib/i18n/messages/{fr,en}.ts`, `components/dashboard/ScheduleBoard.tsx`, `app/dashboard/schedule/page.tsx`.
+
+### 10 octobre 2026
+- **Connexion par numéro de téléphone** (7.40), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261010120000_user_phone` : courriel facultatif + colonne `phone`). Nouveaux : `lib/phone.ts`, `app/api/users/[id]/phone/route.ts`. Modifiés : `prisma/schema.prisma`, `lib/{auth,activity-log}.ts`, `lib/validations/auth.ts`, `lib/i18n/messages/{fr,en}.ts`, `app/api/auth/{join,forgot-password}/route.ts`, `app/api/exports/employees/route.ts`, `app/dashboard/employees/page.tsx`, `components/auth/{LoginForm,JoinForm}.tsx`, `components/dashboard/{EmployeesTable,AdminsCard,RecordDepartureForm}.tsx`.
 
 ## 14. Refonte esthétique (en cours)
 

@@ -36,6 +36,7 @@ export default async function EmployeesPage() {
         firstName: true,
         lastName: true,
         email: true,
+        phone: true,
         role: true,
         status: true,
         hireDate: true,

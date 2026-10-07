@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import { verifyPassword } from "./password";
-import { normalizeLoginEmail } from "./validations/auth";
+import { normalizeLoginIdentifier } from "./validations/auth";
 
 // ------------------------------------------------------------
 // POINT CRITIQUE MULTI-TENANT :
@@ -63,13 +63,14 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Identifiants invalides");
         }
 
+        // Courriel OU numéro de téléphone (AUDIT.md 7.40), nettoyé comme dans
+        // le formulaire (AUDIT.md, 5 oct. 2026).
+        const identifier = normalizeLoginIdentifier(credentials.email);
+        if (!identifier) throw new Error("Identifiants invalides");
         const user = await prisma.user.findUnique({
-          where: {
-            organizationId_email: {
-              organizationId: organization.id,
-              email: normalizeLoginEmail(credentials.email), // même nettoyage que le formulaire (AUDIT.md, 5 oct. 2026)
-            },
-          },
+          where: identifier.includes("@")
+            ? { organizationId_email: { organizationId: organization.id, email: identifier } }
+            : { organizationId_phone: { organizationId: organization.id, phone: identifier } },
         });
 
         if (!user || user.status !== "ACTIVE") {

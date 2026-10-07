@@ -68,6 +68,7 @@ export type AuditAction =
   | "USER_DEPARTMENT_CHOSEN"
   | "USER_PASSWORD_RESET"
   | "USER_PASSWORD_RESET_LINK_CREATED"
+  | "USER_PHONE_UPDATED"
   | "SCHEDULE_PUBLISHED"
   | "SCHEDULE_WEEK_COPIED"
   | "SCHEDULE_SHIFT_UPDATED"
@@ -171,6 +172,7 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   USER_DEPARTMENT_CHOSEN: "a choisi son département",
   USER_PASSWORD_RESET: "a changé son mot de passe (mot de passe oublié)",
   USER_PASSWORD_RESET_LINK_CREATED: "a créé un lien de réinitialisation de mot de passe pour un employé",
+  USER_PHONE_UPDATED: "a changé le numéro de téléphone d'un employé",
   SCHEDULE_PUBLISHED: "a publié l'horaire d'une semaine",
   SCHEDULE_WEEK_COPIED: "a copié l'horaire d'une semaine",
   SCHEDULE_SHIFT_UPDATED: "a modifié un quart déjà publié",

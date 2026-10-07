@@ -1,3 +1,4 @@
+import { normalizePhone } from "@/lib/phone";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
@@ -36,7 +37,9 @@ export async function POST(request: Request) {
 
   const { firstName, lastName, email, password } = parsed.data;
   const normalizedCode = normalizeInviteCode(parsed.data.inviteCode);
-  const normalizedEmail = email.toLowerCase().trim();
+  // Courriel et/ou téléphone (au moins un, vérifié par joinSchema) — AUDIT.md 7.40.
+  const normalizedEmail = email ? email.toLowerCase().trim() : null;
+  const normalizedPhone = normalizePhone(parsed.data.phone);
 
   const organization = await prisma.organization.findUnique({
     where: { inviteCode: normalizedCode },
@@ -52,16 +55,26 @@ export async function POST(request: Request) {
   // L'email est unique PAR organisation (@@unique([organizationId, email])) :
   // contrairement à /api/auth/register, l'organisation existe déjà ici et
   // peut donc déjà contenir cet email — on vérifie explicitement.
-  const existingUser = await prisma.user.findUnique({
-    where: {
-      organizationId_email: { organizationId: organization.id, email: normalizedEmail },
-    },
-  });
-  if (existingUser) {
-    return NextResponse.json(
-      { error: t("errors.emailTakenInOrg") },
-      { status: 409 }
-    );
+  if (normalizedEmail) {
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        organizationId_email: { organizationId: organization.id, email: normalizedEmail },
+      },
+    });
+    if (existingUser) {
+      return NextResponse.json(
+        { error: t("errors.emailTakenInOrg") },
+        { status: 409 }
+      );
+    }
+  }
+  if (normalizedPhone) {
+    const existingPhone = await prisma.user.findUnique({
+      where: { organizationId_phone: { organizationId: organization.id, phone: normalizedPhone } },
+    });
+    if (existingPhone) {
+      return NextResponse.json({ error: t("errors.phoneTakenInOrg") }, { status: 409 });
+    }
   }
 
   const passwordHash = await hashPassword(password);
@@ -95,6 +108,7 @@ export async function POST(request: Request) {
         firstName,
         lastName,
         email: normalizedEmail,
+        phone: normalizedPhone,
         passwordHash,
         role: "EMPLOYEE",
         status: "ACTIVE", // actif immédiatement, pas d'approbation admin (voir AUDIT.md 7.18)

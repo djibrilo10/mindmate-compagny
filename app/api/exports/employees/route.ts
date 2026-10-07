@@ -1,3 +1,4 @@
+import { formatPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
@@ -22,6 +23,7 @@ const COLUMNS = [
   { key: "lastName", label: "Nom" },
   { key: "firstName", label: "Prénom" },
   { key: "email", label: "Courriel" },
+  { key: "phone", label: "Téléphone" },
   { key: "role", label: "Rôle" },
   { key: "department", label: "Département" },
   { key: "status", label: "Statut" },
@@ -55,6 +57,7 @@ export async function GET(request: Request) {
         firstName: true,
         lastName: true,
         email: true,
+        phone: true,
         role: true,
         status: true,
         hireDate: true,
@@ -65,7 +68,8 @@ export async function GET(request: Request) {
     const rows = employees.map((e) => ({
       lastName: e.lastName,
       firstName: e.firstName,
-      email: e.email,
+      email: e.email ?? "",
+      phone: formatPhone(e.phone),
       role: ROLE_LABELS[e.role] ?? e.role,
       department: e.department?.name ?? "—",
       status: STATUS_LABELS[e.status] ?? e.status,

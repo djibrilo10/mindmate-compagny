@@ -196,7 +196,10 @@ model User {
   departmentId   String?
   department     Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  email          String
+  // Courriel facultatif depuis AUDIT.md 7.40 : un employé peut s'inscrire et
+  // se connecter avec seulement son numéro de téléphone.
+  email          String?
+  phone          String?      // format international, ex. "+15145551234" (lib/phone.ts)
   passwordHash   String
   firstName      String
   lastName       String
@@ -235,6 +238,7 @@ model User {
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
   @@unique([organizationId, email])
+  @@unique([organizationId, phone]) // un numéro par personne dans une même entreprise
   @@index([organizationId])
   @@index([organizationId, departmentId])
   @@map("users")

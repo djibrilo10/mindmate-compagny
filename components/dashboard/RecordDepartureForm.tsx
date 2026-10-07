@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, Search, UserMinus, X } from "lucide-react";
 
 // Admin : enregistrer le départ d'un employé (voir AUDIT.md 7.26).
-type Candidate = { id: string; firstName: string; lastName: string; email: string; department: string | null };
+type Candidate = { id: string; firstName: string; lastName: string; email: string | null; department: string | null };
 
 const TYPES = [
   { value: "RESIGNATION", label: "Démission" },
@@ -32,7 +32,7 @@ export function RecordDepartureForm({ candidates }: { candidates: Candidate[] })
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (q ? candidates.filter((c) => `${c.firstName} ${c.lastName} ${c.email}`.toLowerCase().includes(q)) : candidates).slice(0, 8);
+    return (q ? candidates.filter((c) => `${c.firstName} ${c.lastName} ${c.email ?? ""}`.toLowerCase().includes(q)) : candidates).slice(0, 8);
   }, [candidates, query]);
 
   async function submit(event: FormEvent) {

@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Check, CheckCircle2, Copy, KeyRound, Loader2, Search, UserX, X, XCircle } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Copy, KeyRound, Loader2, Pencil, Phone, Search, UserX, X, XCircle } from "lucide-react";
+import { formatPhone } from "@/lib/phone";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 import type { MessageKey } from "@/lib/i18n/translator";
@@ -19,7 +20,8 @@ type Employee = {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null; // facultatif depuis AUDIT.md 7.40
+  phone: string | null;
   role: string;
   status: UserStatus;
   hireDate: string | null;
@@ -53,6 +55,9 @@ export function EmployeesTable({
   const [resetLink, setResetLink] = useState<{ name: string; url: string; expiresAt: string } | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Numéro de téléphone (connexion par téléphone, AUDIT.md 7.40).
+  const [phoneEdit, setPhoneEdit] = useState<{ id: string; name: string; value: string; error: string | null } | null>(null);
+  const [phoneBusy, setPhoneBusy] = useState(false);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -65,7 +70,7 @@ export function EmployeesTable({
     return employees.filter((e) => {
       if (filter && (e.department?.id ?? NONE) !== filter) return false;
       if (!q) return true;
-      return `${e.firstName} ${e.lastName} ${e.email}`.toLowerCase().includes(q);
+      return `${e.firstName} ${e.lastName} ${e.email ?? ""} ${e.phone ?? ""} ${formatPhone(e.phone)}`.toLowerCase().includes(q);
     });
   }, [employees, query, filter]);
 
@@ -126,6 +131,28 @@ export function EmployeesTable({
       setMessage({ ok: false, text: e instanceof Error ? e.message : t("common.unknownError") });
     } finally {
       setLinkingId(null);
+    }
+  }
+
+  async function savePhone() {
+    if (!phoneEdit) return;
+    setPhoneBusy(true);
+    try {
+      const res = await fetch(`/api/users/${phoneEdit.id}/phone`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneEdit.value }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ? tx(data.error) : t("common.operationFailed"));
+      const saved: string | null = data?.phone ?? null;
+      setEmployees((list) => list.map((e) => (e.id === phoneEdit.id ? { ...e, phone: saved } : e)));
+      setMessage({ ok: true, text: saved ? t("departments.employees.phone.saved") : t("departments.employees.phone.removed") });
+      setPhoneEdit(null);
+    } catch (err) {
+      setPhoneEdit((p) => (p ? { ...p, error: err instanceof Error ? err.message : t("common.unknownError") } : p));
+    } finally {
+      setPhoneBusy(false);
     }
   }
 
@@ -280,7 +307,7 @@ export function EmployeesTable({
               )}
               <th className="px-4 py-3 font-medium">{t("departments.employees.name")}</th>
               <th className="px-4 py-3 font-medium">{t("departments.employees.department")}</th>
-              <th className="px-4 py-3 font-medium">{t("departments.employees.email")}</th>
+              <th className="px-4 py-3 font-medium">{t("departments.employees.contact")}</th>
               <th className="px-4 py-3 font-medium">{t("departments.employees.role")}</th>
               <th className="px-4 py-3 font-medium">{t("departments.employees.status")}</th>
               <th className="px-4 py-3 font-medium">{t("departments.employees.hireDate")}</th>
@@ -345,7 +372,24 @@ export function EmployeesTable({
                       <span className="text-[#9AA1B2]">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[#5B6478]">{e.email}</td>
+                  <td className="px-4 py-3 text-[#5B6478]">
+                    {e.email && <span className="block truncate">{e.email}</span>}
+                    {e.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" /> {formatPhone(e.phone)}
+                      </span>
+                    )}
+                    {!e.email && !e.phone && "—"}
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => setPhoneEdit({ id: e.id, name: `${e.firstName} ${e.lastName}`, value: formatPhone(e.phone), error: null })}
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#2F6F5E] hover:underline"
+                      >
+                        <Pencil className="h-3 w-3" /> {e.phone ? t("departments.employees.phone.edit") : t("departments.employees.phone.add")}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[#5B6478]">{t(`departments.roles.${e.role}` as MessageKey)}</td>
                   <td className="px-4 py-3">
                     {e.status === "ACTIVE" ? (
@@ -403,6 +447,46 @@ export function EmployeesTable({
           </tbody>
         </table>
       </div>
+
+      {phoneEdit && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2438]/40 p-4 sm:items-center" onClick={() => !phoneBusy && setPhoneEdit(null)}>
+          <form
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              savePhone();
+            }}
+            onClick={(ev) => ev.stopPropagation()}
+            className="w-full max-w-sm animate-scale-in rounded-2xl bg-white p-5 shadow-xl"
+          >
+            <h2 className="text-base font-semibold text-[#1C2438]">{t("departments.employees.phone.title")}</h2>
+            <p className="mt-0.5 text-sm text-[#5B6478]">{phoneEdit.name}</p>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoFocus
+              value={phoneEdit.value}
+              onChange={(ev) => setPhoneEdit({ ...phoneEdit, value: ev.target.value, error: null })}
+              placeholder="514-555-1234"
+              className="mt-4 w-full rounded-lg border border-[#DADEE5] px-3 py-2.5 text-base"
+            />
+            <p className="mt-2 text-xs leading-relaxed text-[#5B6478]">{t("departments.employees.phone.help")}</p>
+            {phoneEdit.error && (
+              <p className="mt-2 text-sm text-[#8A3B3B]" role="alert">
+                {phoneEdit.error}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setPhoneEdit(null)} className="rounded-lg px-3 py-2 text-sm text-[#5B6478] hover:bg-[#F7F8FA]">
+                {t("common.cancel")}
+              </button>
+              <button type="submit" disabled={phoneBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#2F6F5E] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {phoneBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                {t("common.save")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

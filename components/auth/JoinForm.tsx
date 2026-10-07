@@ -13,6 +13,7 @@ type Values = {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   password: string;
 };
 
@@ -23,6 +24,7 @@ const initialValues: Values = {
   firstName: "",
   lastName: "",
   email: "",
+  phone: "",
   password: "",
 };
 
@@ -111,7 +113,8 @@ export function JoinForm() {
       // d'invitation lui a été communiqué.
       const result = await signIn("credentials", {
         organizationSlug: data.organizationSlug,
-        email: parsed.data.email,
+        // Courriel ou téléphone : celui que la personne a donné (AUDIT.md 7.40).
+        email: parsed.data.email || parsed.data.phone,
         password: parsed.data.password,
         redirect: false,
       });
@@ -191,10 +194,26 @@ export function JoinForm() {
           autoComplete="family-name"
         />
       </div>
+      <p className="-mb-2 text-xs text-[#5B6478]">{t("auth.join.emailOrPhone")}</p>
       <FormField
-        label={t("auth.fields.email")}
+        label={t("auth.fields.phone")}
+        name="phone"
+        type="tel"
+        inputMode="tel"
+        value={values.phone}
+        onChange={handleChange("phone")}
+        error={errors.phone}
+        placeholder={t("auth.placeholders.phone")}
+        autoComplete="tel"
+      />
+      <FormField
+        label={t("auth.fields.emailOptional")}
         name="email"
         type="email"
+        inputMode="email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         value={values.email}
         onChange={handleChange("email")}
         error={errors.email}

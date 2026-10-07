@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       where: { organizationId_email: { organizationId: organization.id, email: parsed.data.email } },
       select: { id: true, email: true, firstName: true, status: true, role: true, locale: true },
     });
-    if (!user || user.status !== "ACTIVE") return genericOk;
+    if (!user || !user.email || user.status !== "ACTIVE") return genericOk;
     // Organisation suspendue : la personne ne pourrait pas se connecter de
     // toute façon (sauf le propriétaire de la plateforme).
     if (organization.status === "SUSPENDED" && user.role !== "SUPER_ADMIN") return genericOk;

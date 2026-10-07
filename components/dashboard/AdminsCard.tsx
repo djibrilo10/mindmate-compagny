@@ -31,12 +31,12 @@ type Admin = {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null; // facultatif depuis AUDIT.md 7.40
   status: "ACTIVE" | "DISABLED";
   isPrimary: boolean;
 };
 
-type Candidate = { id: string; firstName: string; lastName: string; email: string };
+type Candidate = { id: string; firstName: string; lastName: string; email: string | null };
 
 function initials(a: { firstName: string; lastName: string }) {
   return `${a.firstName.charAt(0)}${a.lastName.charAt(0)}`.toUpperCase();
@@ -79,7 +79,7 @@ export function AdminsCard({
     const q = query.trim().toLowerCase();
     const list = q
       ? candidates.filter((c) =>
-          `${c.firstName} ${c.lastName} ${c.email}`.toLowerCase().includes(q)
+          `${c.firstName} ${c.lastName} ${c.email ?? ""}`.toLowerCase().includes(q)
         )
       : candidates;
     return list.slice(0, 8);

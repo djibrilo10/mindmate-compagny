@@ -79,6 +79,9 @@ export const fr = {
       email: "Courriel",
       password: "Mot de passe",
       inviteCode: "Code d'invitation",
+      phone: "Numéro de téléphone",
+      emailOptional: "Courriel (facultatif)",
+      emailOrPhone: "Courriel ou numéro de téléphone",
     },
     placeholders: {
       organizationSlug: "entreprise-a-inc",
@@ -87,6 +90,8 @@ export const fr = {
       emailExample: "alex@entreprisea.com",
       password: "Votre mot de passe",
       newPassword: "8 caractères, une majuscule, un chiffre",
+      phone: "514-555-1234",
+      emailOrPhone: "vous@entreprise.com ou 514-555-1234",
     },
     login: {
       title: "Content de vous revoir",
@@ -109,7 +114,7 @@ export const fr = {
       submitting: "Envoi…",
       sentTitle: "Vérifiez vos courriels",
       sentBody: "Si un compte correspond à ces informations, vous recevrez un lien dans quelques minutes. Il est valide pendant 1 heure. Pensez à regarder dans les courriels indésirables.",
-      noEmailAccess: "Pas accès à ce courriel ? Demandez à votre administrateur de vous générer un lien de réinitialisation depuis la page Employés.",
+      noEmailAccess: "Pas accès à ce courriel, ou compte avec un numéro de téléphone seulement ? Demandez à votre administrateur de vous générer un lien de réinitialisation depuis la page Employés.",
       backToLogin: "Retour à la connexion",
     },
     reset: {
@@ -139,6 +144,7 @@ export const fr = {
       submitting: "Création en cours…",
       isAdmin: "Tu es administrateur et tu veux créer l'espace de ton entreprise ?",
       registerOrg: "Inscris ton entreprise",
+      emailOrPhone: "Donne ton numéro de téléphone, ton courriel, ou les deux : tu pourras te connecter avec l'un ou l'autre.",
     },
     suspended: {
       title: "Accès suspendu",
@@ -164,6 +170,9 @@ export const fr = {
     inviteCodeRequired: "Entrez le code d'invitation fourni par votre administrateur",
     passwordMax: "Ce mot de passe est trop long",
     passwordMismatch: "Les deux mots de passe ne sont pas identiques",
+    identifierInvalid: "Entrez un courriel ou un numéro de téléphone valide",
+    phoneInvalid: "Numéro de téléphone invalide (ex. 514-555-1234)",
+    emailOrPhoneRequired: "Entrez au moins un numéro de téléphone ou un courriel",
     resetLinkInvalid: "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
   },
 
@@ -178,6 +187,7 @@ export const fr = {
     accountCreateFailed: "Impossible de créer le compte. Réessayez dans un instant.",
     orgSuspended: "Cette organisation est suspendue. Contactez votre administrateur.",
     serverError: "Erreur du serveur. Réessayez dans un instant.",
+    phoneTakenInOrg: "Un compte existe déjà avec ce numéro dans cette entreprise.",
   },
 
   // Courriels envoyés par l'application (AUDIT.md 7.35).
@@ -406,6 +416,17 @@ export const fr = {
       reactivate: "Réactiver",
       confirmDisable: "Désactiver ce compte ? La personne ne pourra plus se connecter, mais son historique est conservé.",
       managedInSettings: "Géré dans Paramètres",
+      contact: "Courriel / téléphone",
+      phone: {
+        title: "Numéro de téléphone",
+        add: "Ajouter un numéro",
+        edit: "Changer le numéro",
+        help: "La personne pourra se connecter avec ce numéro et son mot de passe. Laisse vide pour retirer le numéro.",
+        saved: "Numéro enregistré.",
+        removed: "Numéro retiré.",
+        notFound: "Employé introuvable.",
+        needOneLogin: "Ce compte n'a pas de courriel : garde un numéro pour que la personne puisse se connecter.",
+      },
       resetLink: "Lien mot de passe",
       resetLinkTooltip: "Créer un lien pour que la personne choisisse un nouveau mot de passe",
       resetLinkTitle: "Lien de réinitialisation pour {name}",
