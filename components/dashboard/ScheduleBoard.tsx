@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, AlertTriangle, CalendarHeart, CheckCircle2, Copy, Loader2, Lock, Plus, Send, Trash2, Users, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CalendarHeart, CheckCircle2, Copy, Loader2, Lock, Plus, Send, Trash2, Upload, Users, X } from "lucide-react";
+import { ScheduleFilesList, type ScheduleFileItem } from "@/components/dashboard/ScheduleFilesList";
+import { MAX_SCHEDULE_FILE_SIZE, SCHEDULE_FILE_ACCEPT, scheduleFileMimeType } from "@/lib/schedule-file-types";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { addDays } from "@/lib/schedule-time";
 
@@ -49,6 +51,9 @@ export function ScheduleBoard({
   employees,
   shifts,
   absences,
+  files,
+  uploadDepartments,
+  canUploadToAll,
 }: {
   week: string;
   days: string[];
@@ -56,6 +61,9 @@ export function ScheduleBoard({
   employees: Employee[];
   shifts: BoardShift[];
   absences: Record<string, string[]>;
+  files: ScheduleFileItem[];
+  uploadDepartments: Department[];
+  canUploadToAll: boolean;
 }) {
   const router = useRouter();
   const { t, tx, formatDate, formatNumber } = useI18n();
@@ -70,6 +78,15 @@ export function ScheduleBoard({
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishDept, setPublishDept] = useState("");
   const [teamVisible, setTeamVisible] = useState(false);
+  // Téléverser un horaire en fichier (AUDIT.md 7.39).
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadScope, setUploadScope] = useState<"all" | "department">(canUploadToAll ? "all" : "department");
+  const [uploadDept, setUploadDept] = useState(uploadDepartments[0]?.id ?? "");
+  const [uploadNotify, setUploadNotify] = useState(true);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   // Deux façons de voir la semaine (AUDIT.md 7.38) : « Par jour » (simple,
   // idéale sur téléphone) et « Tableau » (vue d'ensemble sur ordinateur).
   const [view, setView] = useState<"days" | "grid">("grid");
@@ -118,6 +135,50 @@ export function ScheduleBoard({
   function openCreate(userId: string, date: string) {
     setError(null);
     setEditor({ userId, date, start: lastTimes.start, end: lastTimes.end, position: "", note: "" });
+  }
+
+  function openUpload() {
+    setUploadFile(null);
+    setUploadTitle("");
+    setUploadError(null);
+    setUploadScope(canUploadToAll ? "all" : "department");
+    setUploadDept(uploadDepartments[0]?.id ?? "");
+    setUploadNotify(true);
+    setUploadOpen(true);
+  }
+
+  function pickFile(file: File | null) {
+    setUploadError(null);
+    if (!file) return setUploadFile(null);
+    if (!scheduleFileMimeType(file.name)) return setUploadError(t("schedule.upload.errors.badType"));
+    if (file.size > MAX_SCHEDULE_FILE_SIZE) return setUploadError(t("schedule.upload.errors.tooBig"));
+    setUploadFile(file);
+  }
+
+  async function submitUpload(e: FormEvent) {
+    e.preventDefault();
+    if (!uploadFile) return setUploadError(t("schedule.upload.errors.noFile"));
+    if (uploadScope === "department" && !uploadDept) return setUploadError(t("schedule.upload.errors.chooseDepartment"));
+    setBusy("upload");
+    setUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      form.append("week", week);
+      form.append("title", uploadTitle);
+      form.append("departmentId", uploadScope === "department" ? uploadDept : "");
+      form.append("notify", uploadNotify ? "1" : "0");
+      const res = await fetch("/api/schedule-files", { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ? tx(data.error) : t("common.operationFailed"));
+      setUploadOpen(false);
+      setMessage({ ok: true, text: uploadNotify ? t("schedule.upload.doneNotified") : t("schedule.upload.done") });
+      router.refresh();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : t("common.unknownError"));
+    } finally {
+      setBusy(null);
+    }
   }
 
   /** Bouton principal « Ajouter un quart » : premier employé, aujourd'hui (ou lundi). */
@@ -264,6 +325,16 @@ export function ScheduleBoard({
           {busy === "copy" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
           {t("schedule.copyPrevious")}
         </button>
+        {(canUploadToAll || uploadDepartments.length > 0) && (
+          <button
+            type="button"
+            onClick={openUpload}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#C7CBD6] bg-white px-4 py-3 text-sm font-medium text-[#1C2438] hover:bg-[#F7F8FA] disabled:opacity-50"
+          >
+            <Upload className="h-4 w-4" /> {t("schedule.upload.button")}
+          </button>
+        )}
         <div className="ml-auto inline-flex rounded-xl border border-[#C7CBD6] bg-white p-1 text-sm">
           {(["days", "grid"] as const).map((v) => (
             <button
@@ -335,6 +406,8 @@ export function ScheduleBoard({
           {message.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />} {message.text}
         </p>
       )}
+
+      <ScheduleFilesList files={files} />
 
       {/* Vue « Par jour » : une carte par jour, en mots simples (AUDIT.md 7.38) */}
       {view === "days" && (
@@ -497,6 +570,116 @@ export function ScheduleBoard({
       </div>
 
         </>
+      )}
+
+      {/* Fenêtre « Téléverser un horaire » (AUDIT.md 7.39) */}
+      {uploadOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2438]/40 p-4 sm:items-center" onClick={() => busy === null && setUploadOpen(false)}>
+          <form onSubmit={submitUpload} onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-md animate-scale-in overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[#1C2438]">{t("schedule.upload.title")}</h2>
+                <p className="mt-0.5 text-sm text-[#5B6478]">
+                  {t("schedule.weekOf", { date: formatDate(`${week}T12:00:00Z`, { month: "long", day: "numeric" }) })}
+                </p>
+              </div>
+              <button type="button" onClick={() => setUploadOpen(false)} aria-label={t("common.close")} className="rounded-md p-1 text-[#5B6478] hover:bg-[#F7F8FA]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mt-4 flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#2F6F5E]/50 bg-[#F3F9F7] px-4 py-6 text-center hover:bg-[#E7F3EF]">
+              <Upload className="h-7 w-7 text-[#2F6F5E]" />
+              <span className="text-sm font-semibold text-[#1C2438]">{uploadFile ? uploadFile.name : t("schedule.upload.choose")}</span>
+              <span className="text-xs text-[#5B6478]">{t("schedule.upload.formats")}</span>
+              <input
+                type="file"
+                accept={SCHEDULE_FILE_ACCEPT}
+                className="sr-only"
+                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+
+            <label className="mt-4 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-[#1C2438]">
+                {t("schedule.upload.name")} <span className="font-normal text-[#9AA1B2]">{t("schedule.optional")}</span>
+              </span>
+              <input
+                value={uploadTitle}
+                maxLength={120}
+                onChange={(e) => setUploadTitle(e.target.value)}
+                placeholder={t("schedule.upload.namePlaceholder")}
+                className="rounded-lg border border-[#DADEE5] px-3 py-2 text-sm"
+              />
+            </label>
+
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium text-[#1C2438]">{t("schedule.upload.whoSees")}</legend>
+              <div className="mt-2 space-y-2">
+                {canUploadToAll && (
+                  <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${uploadScope === "all" ? "border-[#2F6F5E] bg-[#F3F9F7]" : "border-[#E2E4E9] hover:bg-[#F7F8FA]"}`}>
+                    <input type="radio" name="uploadScope" checked={uploadScope === "all"} onChange={() => setUploadScope("all")} className="mt-1 accent-[#2F6F5E]" />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#1C2438]">
+                        <Users className="h-4 w-4 text-[#2F6F5E]" /> {t("schedule.upload.scopeAll")}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-[#5B6478]">{t("schedule.upload.scopeAllHelp")}</span>
+                    </span>
+                  </label>
+                )}
+                {uploadDepartments.length > 0 && (
+                  <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${uploadScope === "department" ? "border-[#2F6F5E] bg-[#F3F9F7]" : "border-[#E2E4E9] hover:bg-[#F7F8FA]"}`}>
+                    <input type="radio" name="uploadScope" checked={uploadScope === "department"} onChange={() => setUploadScope("department")} className="mt-1 accent-[#2F6F5E]" />
+                    <span className="flex-1">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#1C2438]">
+                        <Lock className="h-4 w-4 text-[#2F6F5E]" /> {t("schedule.upload.scopeDepartment")}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-[#5B6478]">{t("schedule.upload.scopeDepartmentHelp")}</span>
+                      {uploadScope === "department" && (
+                        <select
+                          value={uploadDept}
+                          onChange={(e) => setUploadDept(e.target.value)}
+                          className="mt-2 w-full rounded-lg border border-[#DADEE5] bg-white px-3 py-2 text-sm"
+                        >
+                          {uploadDepartments.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </span>
+                  </label>
+                )}
+              </div>
+            </fieldset>
+
+            <label className="mt-4 flex items-start gap-2.5 text-sm text-[#1C2438]">
+              <input type="checkbox" checked={uploadNotify} onChange={(e) => setUploadNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#2F6F5E]" />
+              <span>{t("schedule.upload.notify")}</span>
+            </label>
+
+            {uploadError && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-[#8A3B3B]" role="alert">
+                <AlertCircle className="h-4 w-4" /> {uploadError}
+              </p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg px-3 py-2 text-sm text-[#5B6478] hover:bg-[#F7F8FA]">
+                {t("common.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={busy !== null || !uploadFile}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {t("schedule.upload.submit")}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* Fenêtre « Publier » : département + visibilité (AUDIT.md 7.37) */}

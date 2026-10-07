@@ -144,6 +144,7 @@ model Organization {
   leaveTypes       LeaveType[]
   companyLeaves    CompanyLeave[]
   shifts           Shift[]
+  scheduleFiles    ScheduleFile[]
 
   @@map("organizations")
 }
@@ -161,6 +162,7 @@ model Department {
 
   users    User[]
   managers DepartmentManager[]
+  scheduleFiles ScheduleFile[]
 
   @@unique([organizationId, name]) // pas deux départements du même nom dans la même entreprise
   @@index([organizationId])
@@ -846,4 +848,29 @@ model Shift {
   @@index([organizationId, date])
   @@index([userId, date])
   @@map("shifts")
+}
+
+// ------------------------------------------------------------
+// SCHEDULE FILE — horaire téléversé en fichier (Excel, PDF, Word, image),
+// voir AUDIT.md 7.39. departmentId null = visible par tous les employés ;
+// sinon seulement par ce département (+ admins et ses responsables).
+// Fichier supprimé avec son département (jamais « élargi » à tout le monde).
+// ------------------------------------------------------------
+model ScheduleFile {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  week           String       // lundi de la semaine, "2026-10-12"
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  title          String
+  fileName       String
+  mimeType       String
+  fileSize       Int
+  data           Bytes
+  uploadedById   String
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, week])
+  @@map("schedule_files")
 }

@@ -72,6 +72,8 @@ export type AuditAction =
   | "SCHEDULE_WEEK_COPIED"
   | "SCHEDULE_SHIFT_UPDATED"
   | "SCHEDULE_SHIFT_DELETED"
+  | "SCHEDULE_FILE_UPLOADED"
+  | "SCHEDULE_FILE_DELETED"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -173,6 +175,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   SCHEDULE_WEEK_COPIED: "a copié l'horaire d'une semaine",
   SCHEDULE_SHIFT_UPDATED: "a modifié un quart déjà publié",
   SCHEDULE_SHIFT_DELETED: "a supprimé un quart déjà publié",
+  SCHEDULE_FILE_UPLOADED: "a téléversé un horaire (fichier)",
+  SCHEDULE_FILE_DELETED: "a retiré un horaire (fichier)",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };
@@ -223,6 +227,13 @@ export function actionDetail(action: string, metadata: unknown): string | null {
       const count = typeof data?.count === "number" ? data.count : null;
       const week = typeof data?.week === "string" ? data.week : typeof data?.toWeek === "string" ? data.toWeek : null;
       const parts = [count ? `${count} quart${count > 1 ? "s" : ""}` : null, week ? `semaine du ${week}` : null].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : null;
+    }
+    case "SCHEDULE_FILE_UPLOADED":
+    case "SCHEDULE_FILE_DELETED": {
+      const fileName = typeof data?.fileName === "string" ? data.fileName : null;
+      const week = typeof data?.week === "string" ? data.week : null;
+      const parts = [fileName, week ? `semaine du ${week}` : null].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : null;
     }
     case "SCHEDULE_SHIFT_UPDATED":

@@ -923,6 +923,16 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - Mots simples : « Publier » → « Envoyer », « Brouillon » → « Pas encore envoyé », « Publié » → « Envoyé ».
 - Nouvelle vue **« Par jour »** (une carte par jour : qui travaille, heures, poste, statut, congés, bouton « Ajouter un quart ce jour-là ») ; choisie automatiquement sur téléphone, « Tableau » sur ordinateur ; le choix est mémorisé sur l'appareil.
 
+### 7.39 Horaires — téléverser un horaire en fichier (9 oct. 2026)
+
+À la demande explicite de l'utilisateur : bouton **« Téléverser un horaire »** sur la page Horaires, pour les gérants qui font déjà leur horaire dans Excel, Word, en PDF ou sur papier (photo).
+- **Formats** : Excel (.xlsx, .xls, .csv), PDF, Word (.docx, .doc), images (.png, .jpg, .webp) ; 3,5 Mo maximum (limite de requête Vercel). Le type est déduit de l'EXTENSION (le type envoyé par le navigateur est peu fiable sous Windows) — `lib/schedule-file-types.ts`.
+- **Qui le voit** (même logique que les quarts) : « Tous les employés » (admin seulement) ou « Un seul département » (admin : n'importe lequel ; responsable : ceux qu'il gère). Case « Prévenir les employés concernés » (notification, cochée par défaut). Rattaché à la semaine affichée.
+- **Modèle `ScheduleFile`** (stocké dans Postgres comme les Documents) : semaine, département (null = tout le monde, supprimé avec son département pour ne jamais élargir la visibilité), titre, fichier. Droits centralisés dans `lib/schedule-files.ts` (`visibleScheduleFilesWhere`, `canManageScheduleFileFor`) ; une personne sans droit reçoit « introuvable ».
+- **Affichage** : section « Horaires en fichier pour cette semaine » (`ScheduleFilesList.tsx`) dans la vue gérant ET en haut de la vue employé ; PDF et images s'ouvrent dans le navigateur, Excel/Word se téléchargent (le téléphone les ouvre dans l'app adaptée) ; bouton de retrait pour qui a le droit.
+- **API** : `POST /api/schedule-files` (multipart), `GET|DELETE /api/schedule-files/[id]`. Historique : `SCHEDULE_FILE_UPLOADED`, `SCHEDULE_FILE_DELETED`.
+- Le contenu du fichier n'est pas converti en quarts (lecture automatique d'un Excel libre trop peu fiable) : piste possible plus tard avec un modèle Excel imposé.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1132,6 +1142,9 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - L'utilisateur a supprimé le projet Vercel en double (compte `millionaire02030-2278`) ; seul `mon-projet` (compte `djibrilo10`) reste.
 
 - **Horaires — version simple** (7.38), à la demande explicite de l'utilisateur. Aucune migration. Modifiés : `components/dashboard/ScheduleBoard.tsx`, `lib/i18n/messages/{fr,en}.ts`. Aperçu vérifié dans le conteneur (rendu des deux vues avec le CSS compilé de l'app).
+
+### 9 octobre 2026
+- **Horaires — téléverser un horaire en fichier** (7.39), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261009120000_add_schedule_files`). Nouveaux : `lib/{schedule-files,schedule-file-types}.ts`, `app/api/schedule-files/route.ts`, `app/api/schedule-files/[id]/route.ts`, `components/dashboard/ScheduleFilesList.tsx`. Modifiés : `prisma/schema.prisma` (modèle `ScheduleFile`), `middleware.ts`, `lib/activity-log.ts`, `lib/i18n/messages/{fr,en}.ts`, `components/dashboard/ScheduleBoard.tsx`, `app/dashboard/schedule/page.tsx`.
 
 ## 14. Refonte esthétique (en cours)
 

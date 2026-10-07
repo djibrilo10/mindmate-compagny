@@ -16,6 +16,9 @@ import {
   weekDates,
 } from "@/lib/schedule";
 import { ScheduleBoard, type BoardShift } from "@/components/dashboard/ScheduleBoard";
+import { ScheduleFilesList, type ScheduleFileItem } from "@/components/dashboard/ScheduleFilesList";
+import { canManageScheduleFileFor, visibleScheduleFilesWhere } from "@/lib/schedule-files";
+import { getDepartments, managedDepartmentIds } from "@/lib/departments";
 
 // ------------------------------------------------------------
 // Horaires (AUDIT.md 7.36), une semaine à la fois (lundi -> dimanche) :
@@ -65,6 +68,33 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const week = mondayOf(typeof requested === "string" && isDateString(requested) ? requested : today);
   const days = weekDates(week);
   const usersWhere = schedulableUsersWhere(ctx);
+  // Horaires téléversés en fichier pour cette semaine (AUDIT.md 7.39),
+  // filtrés selon ce que la personne a le droit de voir.
+  const fileRows = await prisma.scheduleFile.findMany({
+    where: { AND: [{ week }, await visibleScheduleFilesWhere(ctx)] },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      fileName: true,
+      mimeType: true,
+      fileSize: true,
+      departmentId: true,
+      department: { select: { name: true, color: true } },
+    },
+  });
+  const files: ScheduleFileItem[] = await Promise.all(
+    fileRows.map(async (f) => ({
+      id: f.id,
+      title: f.title,
+      fileName: f.fileName,
+      mimeType: f.mimeType,
+      fileSize: f.fileSize,
+      department: f.department,
+      canDelete: await canManageScheduleFileFor(ctx, f.departmentId),
+    }))
+  );
+
   const weekLabel = t("schedule.weekOf", { date: formatDate(`${week}T12:00:00Z`, { month: "long", day: "numeric", year: "numeric" }) });
 
   const header = (
@@ -119,6 +149,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       }),
       approvedAbsenceDays(ids, week),
     ]);
+    // Départements pour lesquels on peut téléverser un horaire : tous pour
+    // l'admin, seulement ceux qu'il gère pour un responsable.
+    const allDepartments = await getDepartments(ctx.organizationId);
+    const managed = ctx.role === "MANAGER" ? new Set(await managedDepartmentIds(ctx.userId)) : null;
+    const uploadDepartments = managed ? allDepartments.filter((d) => managed.has(d.id)) : allDepartments;
 
     const boardShifts: BoardShift[] = shifts.map((s) => ({
       id: s.id,
@@ -144,6 +179,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             employees={employees.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, department: e.department }))}
             shifts={boardShifts}
             absences={absences}
+            files={files}
+            uploadDepartments={uploadDepartments}
+            canUploadToAll={ctx.role === "ORG_ADMIN"}
           />
         </div>
       </div>
@@ -198,6 +236,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <p className="mb-4 text-sm text-[#5B6478] animate-fade-in-up stagger-1">
         {t("schedule.myTotal", { hours: (totalMinutes / 60).toLocaleString(undefined, { maximumFractionDigits: 2 }) })}
       </p>
+      {files.length > 0 && (
+        <div className="mb-4 animate-fade-in-up stagger-1">
+          <ScheduleFilesList files={files} />
+        </div>
+      )}
       <div className="grid gap-2.5 animate-fade-in-up stagger-1 sm:grid-cols-2 lg:grid-cols-4">
         {days.map((day) => {
           const dayShifts = myShifts.filter((s) => s.date === day);
