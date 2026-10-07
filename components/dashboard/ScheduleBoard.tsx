@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarHeart, CheckCircle2, Copy, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { AlertCircle, CalendarHeart, CheckCircle2, Copy, Loader2, Lock, Plus, Send, Trash2, Users, X } from "lucide-react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { addDays } from "@/lib/schedule-time";
 
@@ -24,6 +24,7 @@ export type BoardShift = {
   position: string;
   note: string;
   published: boolean;
+  teamVisible: boolean;
 };
 
 type Department = { id: string; name: string; color: string };
@@ -65,6 +66,10 @@ export function ScheduleBoard({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  // Fenêtre « Publier » (AUDIT.md 7.37) : département ciblé + visibilité.
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishDept, setPublishDept] = useState("");
+  const [teamVisible, setTeamVisible] = useState(false);
 
   const departments = useMemo(() => {
     const map = new Map<string, Department>();
@@ -76,6 +81,15 @@ export function ScheduleBoard({
   const visibleIds = new Set(visibleEmployees.map((e) => e.id));
   const drafts = shifts.filter((s) => !s.published).length;
   const positions = useMemo(() => Array.from(new Set(shifts.map((s) => s.position).filter(Boolean))).sort(), [shifts]);
+  const inPublishScope = (s: BoardShift) => {
+    if (!publishDept) return true;
+    const emp = employees.find((e) => e.id === s.userId);
+    return (emp?.department?.id ?? NONE) === publishDept;
+  };
+  const scopeShifts = shifts.filter(inPublishScope);
+  const scopeDrafts = scopeShifts.filter((s) => !s.published);
+  const scopePeople = new Set(scopeDrafts.map((s) => s.userId)).size;
+  const hasNoDepartment = employees.some((e) => !e.department);
   const dayTotals = days.map((d) => shifts.filter((s) => s.date === d && visibleIds.has(s.userId)).reduce((sum, s) => sum + s.minutes, 0));
 
   function openCreate(userId: string, date: string) {
@@ -133,13 +147,26 @@ export function ScheduleBoard({
     }
   }
 
-  async function publish() {
-    if (!window.confirm(t("schedule.confirmPublish", { count: drafts }))) return;
+  function openPublish() {
+    setMessage(null);
+    setPublishDept(filter);
+    // Par défaut, on reprend le choix déjà fait pour cette semaine s'il y en a un.
+    setTeamVisible(shifts.some((s) => s.published && s.teamVisible));
+    setPublishOpen(true);
+  }
+
+  async function publish(e: FormEvent) {
+    e.preventDefault();
     setBusy("publish");
     setMessage(null);
     try {
-      const data = await call("/api/shifts/publish", "POST", { week });
-      setMessage({ ok: true, text: t("schedule.published", { count: data?.published ?? drafts }) });
+      const data = await call("/api/shifts/publish", "POST", { week, departmentId: publishDept, teamVisible });
+      const published = data?.published ?? 0;
+      setMessage({
+        ok: true,
+        text: published > 0 ? t("schedule.published", { count: published }) : t("schedule.visibilitySaved"),
+      });
+      setPublishOpen(false);
       router.refresh();
     } catch (err) {
       setMessage({ ok: false, text: err instanceof Error ? err.message : t("common.unknownError") });
@@ -218,12 +245,12 @@ export function ScheduleBoard({
           </button>
           <button
             type="button"
-            onClick={publish}
-            disabled={busy !== null || drafts === 0}
+            onClick={openPublish}
+            disabled={busy !== null || shifts.length === 0}
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-3 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-50"
           >
             {busy === "publish" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {drafts > 0 ? t("schedule.publish", { count: drafts }) : t("schedule.allPublished")}
+            {drafts > 0 ? t("schedule.publish", { count: drafts }) : t("schedule.visibilityButton")}
           </button>
         </div>
       </div>
@@ -240,6 +267,9 @@ export function ScheduleBoard({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-3 w-5 rounded border border-dashed border-[#9AA1B2] bg-white" /> {t("schedule.legendDraft")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-[#2F6F5E]" /> {t("schedule.legendTeam")}
         </span>
       </p>
 
@@ -296,8 +326,9 @@ export function ScheduleBoard({
                                   : "border-dashed border-[#9AA1B2] bg-white text-[#1C2438] hover:bg-[#F7F8FA]"
                               }`}
                             >
-                              <span className="block font-semibold">
+                              <span className="flex items-center gap-1 font-semibold">
                                 {s.start}–{s.end}
+                                {s.published && s.teamVisible && <Users className="h-3 w-3 shrink-0 text-[#2F6F5E]" aria-label={t("schedule.legendTeam")} />}
                               </span>
                               {s.position && <span className="block truncate text-[#2F6F5E]">{s.position}</span>}
                             </button>
@@ -329,6 +360,93 @@ export function ScheduleBoard({
           </tfoot>
         </table>
       </div>
+
+      {/* Fenêtre « Publier » : département + visibilité (AUDIT.md 7.37) */}
+      {publishOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2438]/40 p-4 sm:items-center" onClick={() => busy === null && setPublishOpen(false)}>
+          <form onSubmit={publish} onClick={(e) => e.stopPropagation()} className="w-full max-w-md animate-scale-in rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[#1C2438]">{t("schedule.publishTitle")}</h2>
+                <p className="mt-0.5 text-sm text-[#5B6478]">
+                  {t("schedule.weekOf", { date: formatDate(`${week}T12:00:00Z`, { month: "long", day: "numeric" }) })}
+                </p>
+              </div>
+              <button type="button" onClick={() => setPublishOpen(false)} aria-label={t("common.close")} className="rounded-md p-1 text-[#5B6478] hover:bg-[#F7F8FA]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mt-4 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-[#1C2438]">{t("schedule.publishDepartment")}</span>
+              <select value={publishDept} onChange={(e) => setPublishDept(e.target.value)} className="rounded-lg border border-[#DADEE5] bg-white px-3 py-2 text-sm">
+                <option value="">{t("schedule.allDepartmentsLong")}</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+                {hasNoDepartment && <option value={NONE}>{t("schedule.noDepartment")}</option>}
+              </select>
+            </label>
+
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium text-[#1C2438]">{t("schedule.visibilityLabel")}</legend>
+              <div className="mt-2 space-y-2">
+                {[
+                  { value: false, icon: Lock, title: t("schedule.visibilityPrivate"), help: t("schedule.visibilityPrivateHelp") },
+                  { value: true, icon: Users, title: t("schedule.visibilityTeam"), help: t("schedule.visibilityTeamHelp") },
+                ].map((opt) => {
+                  const Icon = opt.icon;
+                  const checked = teamVisible === opt.value;
+                  return (
+                    <label
+                      key={String(opt.value)}
+                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${checked ? "border-[#2F6F5E] bg-[#F3F9F7]" : "border-[#E2E4E9] hover:bg-[#F7F8FA]"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        checked={checked}
+                        onChange={() => setTeamVisible(opt.value)}
+                        className="mt-1 accent-[#2F6F5E]"
+                      />
+                      <span>
+                        <span className="flex items-center gap-1.5 text-sm font-medium text-[#1C2438]">
+                          <Icon className="h-4 w-4 text-[#2F6F5E]" /> {opt.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs leading-relaxed text-[#5B6478]">{opt.help}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <p className="mt-4 rounded-lg bg-[#F7F8FA] px-3 py-2 text-xs leading-relaxed text-[#5B6478]">
+              {scopeDrafts.length > 0
+                ? t("schedule.publishSummary", { count: scopeDrafts.length, people: scopePeople })
+                : scopeShifts.length > 0
+                  ? t("schedule.publishNothingNew")
+                  : t("schedule.publishEmpty")}
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setPublishOpen(false)} className="rounded-lg px-3 py-2 text-sm text-[#5B6478] hover:bg-[#F7F8FA]">
+                {t("common.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={busy !== null || scopeShifts.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-[#3D8C76] to-[#265A4C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {busy === "publish" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {scopeDrafts.length > 0 ? t("schedule.publishConfirm") : t("schedule.saveVisibility")}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Fenêtre d'ajout / modification */}
       {editor && (

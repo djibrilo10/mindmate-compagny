@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarHeart, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { getI18n } from "@/lib/i18n/server";
 import {
@@ -114,7 +115,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       prisma.shift.findMany({
         where: { organizationId: ctx.organizationId, userId: { in: ids }, date: { gte: week, lte: addDays(week, 6) } },
         orderBy: [{ date: "asc" }, { startMinute: "asc" }],
-        select: { id: true, userId: true, date: true, startMinute: true, endMinute: true, position: true, note: true, publishedAt: true },
+        select: { id: true, userId: true, date: true, startMinute: true, endMinute: true, position: true, note: true, publishedAt: true, teamVisible: true },
       }),
       approvedAbsenceDays(ids, week),
     ]);
@@ -129,6 +130,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       position: s.position ?? "",
       note: s.note ?? "",
       published: Boolean(s.publishedAt),
+      teamVisible: s.teamVisible,
     }));
 
     return (
@@ -164,6 +166,31 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   ]);
   const totalMinutes = myShifts.reduce((sum, s) => sum + shiftDuration(s.startMinute, s.endMinute), 0);
   const offDays = new Set(myAbsences[ctx.userId] ?? []);
+
+  // Horaire de l'équipe (AUDIT.md 7.37) : quarts publiés que le gérant a
+  // rendus visibles à tous les employés.
+  const teamShifts = await prisma.shift.findMany({
+    where: {
+      organizationId: ctx.organizationId,
+      publishedAt: { not: null },
+      teamVisible: true,
+      date: { gte: week, lte: addDays(week, 6) },
+      user: { status: "ACTIVE", ...VISIBLE_USER },
+    },
+    orderBy: [{ date: "asc" }, { startMinute: "asc" }],
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      startMinute: true,
+      endMinute: true,
+      position: true,
+      user: { select: { firstName: true, lastName: true, department: { select: { name: true, color: true } } } },
+    },
+  });
+  const teamPeople = Array.from(new Map(teamShifts.map((s) => [s.userId, s.user])).entries()).sort((a, b) =>
+    `${a[1].lastName} ${a[1].firstName}`.localeCompare(`${b[1].lastName} ${b[1].firstName}`)
+  );
 
   return (
     <div>
@@ -207,6 +234,59 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           );
         })}
       </div>
+
+      {teamPeople.length > 0 && (
+        <section className="mt-8 animate-fade-in-up stagger-2">
+          <h2 className="text-base font-semibold text-[#1C2438]">{t("schedule.teamTitle")}</h2>
+          <p className="mt-0.5 text-sm text-[#5B6478]">{t("schedule.teamSubtitle")}</p>
+          <div className="mt-3 overflow-x-auto rounded-xl border border-[#E2E4E9] bg-white shadow-sm">
+            <table className="w-full min-w-[820px] table-fixed text-left text-sm">
+              <thead className="bg-[#F7F8FA] text-xs text-[#5B6478]">
+                <tr>
+                  <th className="w-40 px-3 py-2.5 font-medium">{t("schedule.employee")}</th>
+                  {days.map((d) => (
+                    <th key={d} className={`px-2 py-2.5 font-medium ${d === today ? "text-[#2F6F5E]" : ""}`}>
+                      <span className="block capitalize">{formatDate(`${d}T12:00:00Z`, { weekday: "short" })}</span>
+                      <span className="block text-[#1C2438]">{formatDate(`${d}T12:00:00Z`, { day: "numeric", month: "short" })}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E2E4E9]">
+                {teamPeople.map(([userId, person]) => (
+                  <tr key={userId} className={`align-top ${userId === ctx.userId ? "bg-[#F6FBF9]" : ""}`}>
+                    <td className="px-3 py-2">
+                      <p className="truncate font-medium text-[#1C2438]">
+                        {person.firstName} {person.lastName}
+                      </p>
+                      {person.department && (
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[#5B6478]">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: person.department.color }} aria-hidden />
+                          {person.department.name}
+                        </p>
+                      )}
+                    </td>
+                    {days.map((d) => (
+                      <td key={d} className="px-1.5 py-1.5">
+                        {teamShifts
+                          .filter((s) => s.userId === userId && s.date === d)
+                          .map((s) => (
+                            <div key={s.id} className="mb-1 rounded-md border border-[#2F6F5E]/40 bg-[#E7F3EF] px-1.5 py-1 text-xs leading-tight">
+                              <span className="block font-semibold text-[#1C2438]">
+                                {formatMinutes(s.startMinute)}–{formatMinutes(s.endMinute)}
+                              </span>
+                              {s.position && <span className="block truncate text-[#2F6F5E]">{s.position}</span>}
+                            </div>
+                          ))}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

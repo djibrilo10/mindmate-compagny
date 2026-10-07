@@ -835,6 +835,10 @@ model Shift {
   position       String?      // poste, ex. « Caisse », « Cuisine »
   note           String?
   publishedAt    DateTime?
+  // Choisi par le gérant au moment de publier (AUDIT.md 7.37) : true = tous
+  // les employés de l'entreprise voient ce quart dans « Horaire de l'équipe » ;
+  // false = seule la personne concernée le voit.
+  teamVisible    Boolean      @default(false)
   createdById    String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

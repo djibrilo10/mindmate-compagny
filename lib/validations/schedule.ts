@@ -29,6 +29,14 @@ export const weekSchema = z.object({
   week: z.string().refine(isDateString, "schedule.errors.dateInvalid"),
 });
 
+// Publication (AUDIT.md 7.37) : département ciblé ("" = tous, "__none__" =
+// personnes sans département) et visibilité choisie par le gérant.
+export const publishSchema = z.object({
+  week: z.string().refine(isDateString, "schedule.errors.dateInvalid"),
+  departmentId: z.string().default(""),
+  teamVisible: z.boolean().default(false),
+});
+
 export const copyWeekSchema = z.object({
   fromWeek: z.string().refine(isDateString, "schedule.errors.dateInvalid"),
   toWeek: z.string().refine(isDateString, "schedule.errors.dateInvalid"),

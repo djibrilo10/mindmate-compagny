@@ -905,6 +905,14 @@ Jusqu'ici l'app ne tournait qu'en local (`npm run dev` / `npm run start` sur `lo
 - **API** : `POST /api/shifts`, `PATCH|DELETE /api/shifts/[id]`, `POST /api/shifts/publish`, `POST /api/shifts/copy-week` (protégées par `middleware.ts`). Historique : `SCHEDULE_PUBLISHED`, `SCHEDULE_WEEK_COPIED`, `SCHEDULE_SHIFT_UPDATED`, `SCHEDULE_SHIFT_DELETED` (nouvelle catégorie « Horaires »).
 - **Limites connues / suites possibles** : échanges de quart entre employés, « mon prochain quart » sur le tableau de bord, fuseau horaire par entreprise (la date du jour utilise America/Toronto), impression/PDF de l'horaire.
 
+### 7.37 Horaires — publier par département + visibilité (8 oct. 2026)
+
+À la demande explicite de l'utilisateur : au moment de publier, l'admin (ou le responsable) choisit dans une fenêtre « Publier l'horaire » :
+- **le département** à publier : tous, un département précis, ou « Sans département » (un responsable ne voit que les départements qu'il gère, et l'API croise toujours le choix avec son périmètre) ;
+- **la visibilité** : « Chaque employé voit seulement ses quarts » (par défaut) ou « Tous les employés voient l'horaire ». Nouveau champ `Shift.teamVisible`.
+
+La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le choix de visibilité s'applique aussi aux quarts déjà publiés du même périmètre (sans nouvelle notification), ce qui permet de changer d'avis après coup ; le bouton devient « Visibilité de l'horaire » quand il n'y a plus de brouillon. Dans la grille, une petite icône « équipe » marque les quarts visibles par tous. Côté employé, une section **« Horaire de l'équipe »** (personnes × jours, lecture seule) affiche les quarts publiés et visibles par tous de la semaine, sa propre ligne mise en évidence.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1108,6 +1116,10 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 ### 7 octobre 2026
 - **Horaires de travail** (7.36), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261007120000_add_shifts`). Nouveaux : `lib/{schedule,schedule-time}.ts`, `lib/validations/schedule.ts`, `app/api/shifts/route.ts`, `app/api/shifts/[id]/route.ts`, `app/api/shifts/{publish,copy-week}/route.ts`, `app/dashboard/schedule/page.tsx`, `components/dashboard/ScheduleBoard.tsx`. Modifiés : `prisma/schema.prisma` (modèle `Shift`), `middleware.ts`, `components/dashboard/{nav-items.ts,CategoryIcon.tsx}`, `lib/activity-log.ts`, `lib/i18n/messages/{fr,en}.ts`. Vérifié dans le conteneur : syntaxe, clés de traduction FR/EN, tests des calculs de dates/heures ; compilation complète à confirmer par `npm run build`.
 - Mise en production clarifiée : le vrai site (www.mindmatecompagny.com) est le projet Vercel `mon-projet` du compte `djibrilo10` ; un projet en double avait été créé par erreur dans un second compte Vercel. Variables Resend ajoutées à `mon-projet` via la CLI ; DNS Resend (DKIM, MX et SPF sur `send`) ajoutés ; domaine vérifié, « Mot de passe oublié » confirmé fonctionnel par l'utilisateur.
+
+### 8 octobre 2026
+- **Horaires — publier par département + visibilité** (7.37), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261008120000_shift_team_visible`). Modifiés : `prisma/schema.prisma`, `lib/validations/schedule.ts` (`publishSchema`), `app/api/shifts/publish/route.ts`, `app/dashboard/schedule/page.tsx`, `components/dashboard/ScheduleBoard.tsx`, `lib/i18n/messages/{fr,en}.ts`.
+- L'utilisateur a supprimé le projet Vercel en double (compte `millionaire02030-2278`) ; seul `mon-projet` (compte `djibrilo10`) reste.
 
 ## 14. Refonte esthétique (en cours)
 
