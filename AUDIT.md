@@ -913,6 +913,16 @@ Jusqu'ici l'app ne tournait qu'en local (`npm run dev` / `npm run start` sur `lo
 
 La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le choix de visibilité s'applique aussi aux quarts déjà publiés du même périmètre (sans nouvelle notification), ce qui permet de changer d'avis après coup ; le bouton devient « Visibilité de l'horaire » quand il n'y a plus de brouillon. Dans la grille, une petite icône « équipe » marque les quarts visibles par tous. Côté employé, une section **« Horaire de l'équipe »** (personnes × jours, lecture seule) affiche les quarts publiés et visibles par tous de la semaine, sa propre ligne mise en évidence.
 
+### 7.38 Horaires — version « simple » (8 oct. 2026)
+
+À la demande explicite de l'utilisateur (« imagine une mère de 60 ans admin ») : refonte de l'écran gérant de `ScheduleBoard.tsx`, sans changement de base de données ni d'API.
+- Mode d'emploi en 3 étapes numérotées en haut de la page.
+- Gros bouton vert **« Ajouter un quart »** (la fenêtre permet maintenant de choisir l'employé et le jour) + « Copier la semaine dernière ».
+- **Heures rapides** dans la fenêtre : Matin 8 h – 16 h, Jour 9 h – 17 h, Soir 16 h – minuit.
+- Bandeau jaune « N quarts ne sont pas encore envoyés à tes employés » avec le bouton **« Envoyer l'horaire »** juste à côté ; bandeau vert quand tout est envoyé ; message d'aide quand la semaine est vide.
+- Mots simples : « Publier » → « Envoyer », « Brouillon » → « Pas encore envoyé », « Publié » → « Envoyé ».
+- Nouvelle vue **« Par jour »** (une carte par jour : qui travaille, heures, poste, statut, congés, bouton « Ajouter un quart ce jour-là ») ; choisie automatiquement sur téléphone, « Tableau » sur ordinateur ; le choix est mémorisé sur l'appareil.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1120,6 +1130,8 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 ### 8 octobre 2026
 - **Horaires — publier par département + visibilité** (7.37), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261008120000_shift_team_visible`). Modifiés : `prisma/schema.prisma`, `lib/validations/schedule.ts` (`publishSchema`), `app/api/shifts/publish/route.ts`, `app/dashboard/schedule/page.tsx`, `components/dashboard/ScheduleBoard.tsx`, `lib/i18n/messages/{fr,en}.ts`.
 - L'utilisateur a supprimé le projet Vercel en double (compte `millionaire02030-2278`) ; seul `mon-projet` (compte `djibrilo10`) reste.
+
+- **Horaires — version simple** (7.38), à la demande explicite de l'utilisateur. Aucune migration. Modifiés : `components/dashboard/ScheduleBoard.tsx`, `lib/i18n/messages/{fr,en}.ts`. Aperçu vérifié dans le conteneur (rendu des deux vues avec le CSS compilé de l'app).
 
 ## 14. Refonte esthétique (en cours)
 
