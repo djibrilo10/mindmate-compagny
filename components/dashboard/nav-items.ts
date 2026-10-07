@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Clock3,
   DoorOpen,
   Download,
   FileText,
@@ -39,6 +40,8 @@ export const navItems: {
   { labelKey: "nav.departments", href: "/dashboard/departments", icon: Building2 },
   { labelKey: "nav.reports", href: "/dashboard/reports", icon: Flag },
   { labelKey: "nav.absences", href: "/dashboard/absences", icon: CalendarDays },
+  // Horaires (AUDIT.md 7.36) : grille pour admins/responsables, « mes quarts » pour les employés.
+  { labelKey: "nav.schedule", href: "/dashboard/schedule", icon: Clock3 },
   { labelKey: "nav.files", href: "/dashboard/files", icon: FileText },
   { labelKey: "nav.announcements", href: "/dashboard/announcements", icon: Megaphone },
   { labelKey: "nav.jobs", href: "/dashboard/jobs", icon: Briefcase },

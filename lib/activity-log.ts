@@ -68,6 +68,10 @@ export type AuditAction =
   | "USER_DEPARTMENT_CHOSEN"
   | "USER_PASSWORD_RESET"
   | "USER_PASSWORD_RESET_LINK_CREATED"
+  | "SCHEDULE_PUBLISHED"
+  | "SCHEDULE_WEEK_COPIED"
+  | "SCHEDULE_SHIFT_UPDATED"
+  | "SCHEDULE_SHIFT_DELETED"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -84,6 +88,7 @@ export type ActivityCategory =
   | "SUPPORT"
   | "DEPARTURE"
   | "DEPARTMENT"
+  | "SCHEDULE"
   | "ORGANIZATION";
 
 export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
@@ -99,6 +104,7 @@ export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
   SUPPORT: "Assistance",
   DEPARTURE: "Départs",
   DEPARTMENT: "Départements",
+  SCHEDULE: "Horaires",
   ORGANIZATION: "Organisation",
 };
 
@@ -163,6 +169,10 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   USER_DEPARTMENT_CHOSEN: "a choisi son département",
   USER_PASSWORD_RESET: "a changé son mot de passe (mot de passe oublié)",
   USER_PASSWORD_RESET_LINK_CREATED: "a créé un lien de réinitialisation de mot de passe pour un employé",
+  SCHEDULE_PUBLISHED: "a publié l'horaire d'une semaine",
+  SCHEDULE_WEEK_COPIED: "a copié l'horaire d'une semaine",
+  SCHEDULE_SHIFT_UPDATED: "a modifié un quart déjà publié",
+  SCHEDULE_SHIFT_DELETED: "a supprimé un quart déjà publié",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };
@@ -208,6 +218,20 @@ export function actionDetail(action: string, metadata: unknown): string | null {
   const data = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : null;
 
   switch (action) {
+    case "SCHEDULE_PUBLISHED":
+    case "SCHEDULE_WEEK_COPIED": {
+      const count = typeof data?.count === "number" ? data.count : null;
+      const week = typeof data?.week === "string" ? data.week : typeof data?.toWeek === "string" ? data.toWeek : null;
+      const parts = [count ? `${count} quart${count > 1 ? "s" : ""}` : null, week ? `semaine du ${week}` : null].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : null;
+    }
+    case "SCHEDULE_SHIFT_UPDATED":
+    case "SCHEDULE_SHIFT_DELETED": {
+      const before = typeof data?.before === "string" ? data.before : null;
+      const after = typeof data?.after === "string" ? data.after : null;
+      if (before && after) return `${before} → ${after}`;
+      return typeof data?.date === "string" ? data.date : null;
+    }
     case "FILE_UPLOADED": {
       const count = typeof data?.count === "number" ? data.count : null;
       const category = typeof data?.category === "string" ? data.category : null;

@@ -4,6 +4,7 @@ import {
   CalendarDays,
   DoorOpen,
   ClipboardList,
+  Clock3,
   FileText,
   Flag,
   LifeBuoy,
@@ -33,6 +34,7 @@ const CATEGORY_ICON_COMPONENTS: Record<ActivityCategory, LucideIcon> = {
   SUPPORT: LifeBuoy,
   DEPARTURE: DoorOpen,
   DEPARTMENT: Network,
+  SCHEDULE: Clock3,
   ORGANIZATION: Building2,
 };
 

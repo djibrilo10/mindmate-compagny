@@ -143,6 +143,7 @@ model Organization {
   departures       Departure[]
   leaveTypes       LeaveType[]
   companyLeaves    CompanyLeave[]
+  shifts           Shift[]
 
   @@map("organizations")
 }
@@ -227,6 +228,7 @@ model User {
   departures           Departure[]           @relation("DepartureEmployee")
   departuresRecorded   Departure[]           @relation("DepartureRecorder")
   passwordResetTokens  PasswordResetToken[]
+  shifts               Shift[]
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -813,4 +815,31 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+// ------------------------------------------------------------
+// SHIFT — un quart de travail (Horaires, voir AUDIT.md 7.36)
+// date + minutes depuis minuit, en heure LOCALE de l'entreprise (pas de
+// fuseau à convertir). endMinute <= startMinute = se termine le lendemain.
+// publishedAt null = brouillon, invisible pour l'employé.
+// ------------------------------------------------------------
+model Shift {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           String       // "2026-10-12"
+  startMinute    Int          // 0..1439
+  endMinute      Int          // 0..1439
+  position       String?      // poste, ex. « Caisse », « Cuisine »
+  note           String?
+  publishedAt    DateTime?
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, date])
+  @@index([userId, date])
+  @@map("shifts")
 }

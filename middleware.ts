@@ -93,6 +93,7 @@ export const config = {
     "/api/leave/:path*",
     "/api/departments/:path*",
     "/api/me/:path*",
+    "/api/shifts/:path*",
     "/platform/:path*",
     "/api/platform/:path*",
     "/suspended",
