@@ -7,6 +7,7 @@ import { formatPhone } from "@/lib/phone";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { DepartmentBadge } from "@/components/dashboard/DepartmentBadge";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { Portal } from "@/components/ui/Portal";
 
 // ------------------------------------------------------------
 // Liste des employés (AUDIT.md 7.34) : recherche, filtre par département
@@ -449,43 +450,45 @@ export function EmployeesTable({
       </div>
 
       {phoneEdit && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2438]/40 p-4 sm:items-center" onClick={() => !phoneBusy && setPhoneEdit(null)}>
-          <form
-            onSubmit={(ev) => {
-              ev.preventDefault();
-              savePhone();
-            }}
-            onClick={(ev) => ev.stopPropagation()}
-            className="w-full max-w-sm animate-scale-in rounded-2xl bg-white p-5 shadow-xl"
-          >
-            <h2 className="text-base font-semibold text-[#1C2438]">{t("departments.employees.phone.title")}</h2>
-            <p className="mt-0.5 text-sm text-[#5B6478]">{phoneEdit.name}</p>
-            <input
-              type="tel"
-              inputMode="tel"
-              autoFocus
-              value={phoneEdit.value}
-              onChange={(ev) => setPhoneEdit({ ...phoneEdit, value: ev.target.value, error: null })}
-              placeholder="514-555-1234"
-              className="mt-4 w-full rounded-lg border border-[#DADEE5] px-3 py-2.5 text-base"
-            />
-            <p className="mt-2 text-xs leading-relaxed text-[#5B6478]">{t("departments.employees.phone.help")}</p>
-            {phoneEdit.error && (
-              <p className="mt-2 text-sm text-[#8A3B3B]" role="alert">
-                {phoneEdit.error}
-              </p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setPhoneEdit(null)} className="rounded-lg px-3 py-2 text-sm text-[#5B6478] hover:bg-[#F7F8FA]">
-                {t("common.cancel")}
-              </button>
-              <button type="submit" disabled={phoneBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#2F6F5E] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                {phoneBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t("common.save")}
-              </button>
-            </div>
-          </form>
-        </div>
+        <Portal>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2438]/40 p-4 sm:items-center" onClick={() => !phoneBusy && setPhoneEdit(null)}>
+            <form
+              onSubmit={(ev) => {
+                ev.preventDefault();
+                savePhone();
+              }}
+              onClick={(ev) => ev.stopPropagation()}
+              className="w-full max-w-sm animate-scale-in rounded-2xl bg-white p-5 shadow-xl"
+            >
+              <h2 className="text-base font-semibold text-[#1C2438]">{t("departments.employees.phone.title")}</h2>
+              <p className="mt-0.5 text-sm text-[#5B6478]">{phoneEdit.name}</p>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoFocus
+                value={phoneEdit.value}
+                onChange={(ev) => setPhoneEdit({ ...phoneEdit, value: ev.target.value, error: null })}
+                placeholder="514-555-1234"
+                className="mt-4 w-full rounded-lg border border-[#DADEE5] px-3 py-2.5 text-base"
+              />
+              <p className="mt-2 text-xs leading-relaxed text-[#5B6478]">{t("departments.employees.phone.help")}</p>
+              {phoneEdit.error && (
+                <p className="mt-2 text-sm text-[#8A3B3B]" role="alert">
+                  {phoneEdit.error}
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setPhoneEdit(null)} className="rounded-lg px-3 py-2 text-sm text-[#5B6478] hover:bg-[#F7F8FA]">
+                  {t("common.cancel")}
+                </button>
+                <button type="submit" disabled={phoneBusy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#2F6F5E] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                  {phoneBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t("common.save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Portal>
       )}
     </div>
   );
