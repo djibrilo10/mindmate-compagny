@@ -19,6 +19,16 @@ import { ScheduleBoard, type BoardShift } from "@/components/dashboard/ScheduleB
 import { ScheduleFilesList, type ScheduleFileItem } from "@/components/dashboard/ScheduleFilesList";
 import { canManageScheduleFileFor, visibleScheduleFilesWhere } from "@/lib/schedule-files";
 import { getDepartments, managedDepartmentIds } from "@/lib/departments";
+import { ACTIVE_SWAP_STATUSES, colleaguesWhere, offersForUserWhere } from "@/lib/shift-swaps";
+import {
+  GiveShiftButton,
+  SwapApprovals,
+  SwapOffers,
+  type Colleague,
+  type MySwap,
+  type SwapApproval,
+  type SwapOffer,
+} from "@/components/dashboard/ShiftSwaps";
 
 // ------------------------------------------------------------
 // Horaires (AUDIT.md 7.36), une semaine à la fois (lundi -> dimanche) :
@@ -27,7 +37,12 @@ import { getDepartments, managedDepartmentIds } from "@/lib/departments";
 //   « Publier la semaine » ;
 // - employé : SES quarts PUBLIÉS de la semaine, jour par jour.
 // Les congés approuvés sont affichés dans les deux vues.
+// Échanges de quart (AUDIT.md 7.42) : l'employé cède un quart (« Je ne peux
+// pas venir ») et voit les quarts proposés par ses collègues ; le gérant
+// voit les échanges à approuver au-dessus de la grille.
 // ------------------------------------------------------------
+
+const timeRange = (start: number, end: number) => `${formatMinutes(start)} – ${formatMinutes(end)}`;
 
 /** Dates (AAAA-MM-JJ) de la semaine couvertes par un congé approuvé, par personne. */
 async function approvedAbsenceDays(userIds: string[], week: string) {
@@ -155,6 +170,29 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const managed = ctx.role === "MANAGER" ? new Set(await managedDepartmentIds(ctx.userId)) : null;
     const uploadDepartments = managed ? allDepartments.filter((d) => managed.has(d.id)) : allDepartments;
 
+    // Échanges acceptés par un collègue, en attente d'approbation : seulement
+    // ceux où ce gérant peut faire l'horaire des DEUX personnes.
+    const pendingSwaps = await prisma.shiftSwap.findMany({
+      where: { organizationId: ctx.organizationId, status: "ACCEPTED", fromUser: usersWhere, takenBy: usersWhere },
+      orderBy: { updatedAt: "asc" },
+      select: {
+        id: true,
+        note: true,
+        fromUser: { select: { firstName: true, lastName: true } },
+        takenBy: { select: { firstName: true, lastName: true } },
+        shift: { select: { date: true, startMinute: true, endMinute: true, position: true } },
+      },
+    });
+    const approvals: SwapApproval[] = pendingSwaps.map((sw): SwapApproval => ({
+      id: sw.id,
+      dateLabel: formatDate(`${sw.shift.date}T12:00:00Z`, { weekday: "long", day: "numeric", month: "long" }),
+      time: timeRange(sw.shift.startMinute, sw.shift.endMinute),
+      position: sw.shift.position ?? "",
+      fromName: `${sw.fromUser.firstName} ${sw.fromUser.lastName}`,
+      takerName: sw.takenBy ? `${sw.takenBy.firstName} ${sw.takenBy.lastName}` : "",
+      note: sw.note ?? "",
+    }));
+
     const boardShifts: BoardShift[] = shifts.map((s) => ({
       id: s.id,
       userId: s.userId,
@@ -171,6 +209,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     return (
       <div>
         {header}
+        <SwapApprovals items={approvals} />
         <div className="animate-fade-in-up stagger-1">
           <ScheduleBoard
             week={week}
@@ -202,6 +241,67 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     }),
     approvedAbsenceDays([ctx.userId], week),
   ]);
+  // Échanges de quart (AUDIT.md 7.42).
+  const me = await prisma.user.findUnique({ where: { id: ctx.userId }, select: { departmentId: true } });
+  const myDepartmentId = me?.departmentId ?? null;
+  const [mySwapRows, colleagueRows, offerRows] = await Promise.all([
+    prisma.shiftSwap.findMany({
+      where: { fromUserId: ctx.userId, status: { in: ACTIVE_SWAP_STATUSES }, shiftId: { in: myShifts.map((s) => s.id) } },
+      select: {
+        id: true,
+        shiftId: true,
+        status: true,
+        targetUser: { select: { firstName: true, lastName: true } },
+        takenBy: { select: { firstName: true, lastName: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: colleaguesWhere(ctx.organizationId, ctx.userId),
+      select: { id: true, firstName: true, lastName: true, departmentId: true },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    }),
+    prisma.shiftSwap.findMany({
+      where: {
+        OR: [
+          offersForUserWhere({ organizationId: ctx.organizationId, userId: ctx.userId, departmentId: myDepartmentId, today }),
+          { organizationId: ctx.organizationId, status: "ACCEPTED", takenById: ctx.userId, shift: { date: { gte: today } } },
+        ],
+      },
+      orderBy: { shift: { date: "asc" } },
+      take: 30,
+      select: {
+        id: true,
+        status: true,
+        targetUserId: true,
+        fromUser: { select: { firstName: true, lastName: true } },
+        shift: { select: { date: true, startMinute: true, endMinute: true, position: true } },
+      },
+    }),
+  ]);
+  const mySwaps = new Map<string, MySwap>(
+    mySwapRows.map((sw): [string, MySwap] => [
+      sw.shiftId,
+      {
+        id: sw.id,
+        status: sw.status === "ACCEPTED" ? "ACCEPTED" : "OPEN",
+        targetName: sw.targetUser ? `${sw.targetUser.firstName} ${sw.targetUser.lastName}` : null,
+        takerName: sw.takenBy ? `${sw.takenBy.firstName} ${sw.takenBy.lastName}` : null,
+      },
+    ])
+  );
+  const colleagues: Colleague[] = colleagueRows
+    .map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, sameTeam: c.departmentId === myDepartmentId }))
+    .sort((a, b) => Number(b.sameTeam) - Number(a.sameTeam));
+  const offers: SwapOffer[] = offerRows.map((o): SwapOffer => ({
+    id: o.id,
+    dateLabel: formatDate(`${o.shift.date}T12:00:00Z`, { weekday: "long", day: "numeric", month: "long" }),
+    time: timeRange(o.shift.startMinute, o.shift.endMinute),
+    position: o.shift.position ?? "",
+    fromName: `${o.fromUser.firstName} ${o.fromUser.lastName}`,
+    toYou: o.targetUserId === ctx.userId,
+    status: o.status === "ACCEPTED" ? "ACCEPTED" : "OPEN",
+  }));
+
   const totalMinutes = myShifts.reduce((sum, s) => sum + shiftDuration(s.startMinute, s.endMinute), 0);
   const offDays = new Set(myAbsences[ctx.userId] ?? []);
 
@@ -241,6 +341,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           <ScheduleFilesList files={files} />
         </div>
       )}
+      {offers.length > 0 && (
+        <div className="mb-4">
+          <SwapOffers offers={offers} />
+        </div>
+      )}
       <div className="grid gap-2.5 animate-fade-in-up stagger-1 sm:grid-cols-2 lg:grid-cols-4">
         {days.map((day) => {
           const dayShifts = myShifts.filter((s) => s.date === day);
@@ -270,6 +375,15 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     </p>
                     {s.position && <p className="mt-0.5 text-sm text-[#2F6F5E]">{s.position}</p>}
                     {s.note && <p className="mt-0.5 text-xs text-[#5B6478]">{s.note}</p>}
+                    {s.date >= today && (
+                      <GiveShiftButton
+                        shiftId={s.id}
+                        dateLabel={formatDate(`${s.date}T12:00:00Z`, { weekday: "long", day: "numeric", month: "long" })}
+                        time={timeRange(s.startMinute, s.endMinute)}
+                        colleagues={colleagues}
+                        swap={mySwaps.get(s.id) ?? null}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

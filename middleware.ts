@@ -95,6 +95,7 @@ export const config = {
     "/api/me/:path*",
     "/api/shifts/:path*",
     "/api/schedule-files/:path*",
+    "/api/shift-swaps/:path*",
     "/platform/:path*",
     "/api/platform/:path*",
     "/suspended",

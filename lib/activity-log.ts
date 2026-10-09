@@ -75,6 +75,12 @@ export type AuditAction =
   | "SCHEDULE_SHIFT_DELETED"
   | "SCHEDULE_FILE_UPLOADED"
   | "SCHEDULE_FILE_DELETED"
+  | "SCHEDULE_SWAP_OFFERED"
+  | "SCHEDULE_SWAP_ACCEPTED"
+  | "SCHEDULE_SWAP_DECLINED"
+  | "SCHEDULE_SWAP_CANCELLED"
+  | "SCHEDULE_SWAP_APPROVED"
+  | "SCHEDULE_SWAP_REJECTED"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -179,6 +185,12 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   SCHEDULE_SHIFT_DELETED: "a supprimé un quart déjà publié",
   SCHEDULE_FILE_UPLOADED: "a téléversé un horaire (fichier)",
   SCHEDULE_FILE_DELETED: "a retiré un horaire (fichier)",
+  SCHEDULE_SWAP_OFFERED: "a proposé de céder un quart",
+  SCHEDULE_SWAP_ACCEPTED: "a accepté de prendre le quart d'un collègue",
+  SCHEDULE_SWAP_DECLINED: "a refusé le quart proposé par un collègue",
+  SCHEDULE_SWAP_CANCELLED: "a annulé une demande d'échange de quart",
+  SCHEDULE_SWAP_APPROVED: "a approuvé un échange de quart",
+  SCHEDULE_SWAP_REJECTED: "a refusé un échange de quart",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };
@@ -237,6 +249,15 @@ export function actionDetail(action: string, metadata: unknown): string | null {
       const week = typeof data?.week === "string" ? data.week : null;
       const parts = [fileName, week ? `semaine du ${week}` : null].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : null;
+    }
+    case "SCHEDULE_SWAP_OFFERED":
+    case "SCHEDULE_SWAP_ACCEPTED":
+    case "SCHEDULE_SWAP_DECLINED":
+    case "SCHEDULE_SWAP_CANCELLED":
+    case "SCHEDULE_SWAP_APPROVED":
+    case "SCHEDULE_SWAP_REJECTED": {
+      const date = typeof data?.date === "string" ? data.date : null;
+      return date ? `quart du ${date}` : null;
     }
     case "SCHEDULE_SHIFT_UPDATED":
     case "SCHEDULE_SHIFT_DELETED": {

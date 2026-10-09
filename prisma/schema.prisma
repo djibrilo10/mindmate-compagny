@@ -145,6 +145,7 @@ model Organization {
   companyLeaves    CompanyLeave[]
   shifts           Shift[]
   scheduleFiles    ScheduleFile[]
+  shiftSwaps       ShiftSwap[]
 
   @@map("organizations")
 }
@@ -234,6 +235,9 @@ model User {
   departuresRecorded   Departure[]           @relation("DepartureRecorder")
   passwordResetTokens  PasswordResetToken[]
   shifts               Shift[]
+  shiftSwapsOffered    ShiftSwap[]           @relation("ShiftSwapFrom")
+  shiftSwapsTargeted   ShiftSwap[]           @relation("ShiftSwapTarget")
+  shiftSwapsTaken      ShiftSwap[]           @relation("ShiftSwapTaker")
 
   // Un email doit être unique PAR organisation (pas globalement,
   // car la même personne pourrait théoriquement travailler dans 2 entreprises clientes différentes avec le même email)
@@ -848,6 +852,7 @@ model Shift {
   createdById    String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  swaps          ShiftSwap[]
 
   @@index([organizationId, date])
   @@index([userId, date])
@@ -877,4 +882,48 @@ model ScheduleFile {
 
   @@index([organizationId, week])
   @@map("schedule_files")
+}
+
+// ------------------------------------------------------------
+// SHIFT SWAP — un employé cède un de ses quarts publiés (AUDIT.md 7.42).
+//   OPEN      : proposé (à un collègue précis, ou à son département si
+//               targetUserId est null) — personne n'a encore accepté ;
+//   ACCEPTED  : un collègue (takenById) l'accepte — en attente du responsable ;
+//   APPROVED  : approuvé, le quart est passé au nom de takenById ;
+//   REJECTED  : refusé par le responsable (rien ne change) ;
+//   DECLINED  : refusé par le collègue visé ;
+//   CANCELLED : annulé par l'employé, ou parce que le quart a été modifié.
+// Un seul échange actif (OPEN ou ACCEPTED) à la fois par quart.
+// ------------------------------------------------------------
+enum ShiftSwapStatus {
+  OPEN
+  ACCEPTED
+  APPROVED
+  REJECTED
+  DECLINED
+  CANCELLED
+}
+
+model ShiftSwap {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shiftId        String
+  shift          Shift           @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  fromUserId     String
+  fromUser       User            @relation("ShiftSwapFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  targetUserId   String?         // null = proposé à tout son département
+  targetUser     User?           @relation("ShiftSwapTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  takenById      String?
+  takenBy        User?           @relation("ShiftSwapTaker", fields: [takenById], references: [id], onDelete: Cascade)
+  status         ShiftSwapStatus @default(OPEN)
+  note           String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, status])
+  @@index([shiftId])
+  @@map("shift_swaps")
 }

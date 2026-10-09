@@ -950,6 +950,17 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - Correctif : nouveau composant `components/ui/Portal.tsx` (rendu via `createPortal` dans `<body>` + blocage du défilement de la page pendant l'ouverture). Utilisé par les 3 modales de `ScheduleBoard` (ajout/modification, publier, téléverser) et la modale « Téléphone » de `EmployeesTable`. Les formulaires ont `max-h-[90vh] overflow-y-auto` pour défiler sur petit écran.
 - Règle : toute nouvelle modale `fixed inset-0` doit être enveloppée dans `<Portal>`.
 
+### 7.42 Horaires — échanges de quart (10 oct. 2026)
+
+- Choix de l'utilisateur : l'employé **cède** son quart (pas d'échange « mon mardi contre ton jeudi ») ; il le propose **à un collègue précis ou à tout son département** (le premier qui accepte le prend) ; le **responsable approuve toujours** avant que l'horaire change.
+- Modèle `ShiftSwap` (table `shift_swaps`, enum `ShiftSwapStatus` : OPEN → ACCEPTED → APPROVED / REJECTED ; DECLINED par le collègue visé ; CANCELLED par l'employé ou parce que le gérant a modifié le quart). Un seul échange actif (OPEN/ACCEPTED) par quart. Migration `20261011120000_add_shift_swaps`.
+- `lib/shift-swaps.ts` : `offersForUserWhere` (offres visibles : destinées à moi, ou à mon département — même `departmentId` que celui qui cède, `null` = personnes sans département), `swapApproverIds` (responsables qui gèrent les DEUX départements, sinon les admins), `departmentColleagueIds`, `cancelActiveSwaps`.
+- API : `POST /api/shift-swaps` (quart à moi, publié, aujourd'hui ou plus tard) ; `PATCH /api/shift-swaps/[id]` `{ action: accept | decline | cancel | approve | reject }`. Transitions conditionnelles (`updateMany` sur le statut attendu) : deux collègues qui acceptent en même temps → un seul l'obtient. Accepter et approuver vérifient le chevauchement avec les autres quarts du collègue. Approuver = transaction qui passe `shift.userId` au collègue. Approuver/refuser exige `canScheduleUser` sur les deux personnes.
+- `PATCH /api/shifts/[id]` : si la personne, le jour ou les heures changent, les échanges en cours du quart sont annulés. Supprimer un quart supprime ses échanges (cascade).
+- Écran (`components/dashboard/ShiftSwaps.tsx`) : bouton « Je ne peux pas venir » sur chaque quart à venir de l'employé (fenêtre via `<Portal>`), statut + « Annuler la demande » ; section « Quarts proposés par tes collègues » (« Je le prends » / « Non merci ») ; pour l'admin et les responsables, bloc « Échanges de quart à approuver » au-dessus de la grille.
+- Notifications à chaque étape (proposé, accepté → responsables + employé, refusé, annulé, approuvé, refusé par le responsable). Historique : `SCHEDULE_SWAP_{OFFERED,ACCEPTED,DECLINED,CANCELLED,APPROVED,REJECTED}`.
+- Limite connue : les responsables et admins voient la vue gérant ; ils ne peuvent pas céder leurs propres quarts depuis l'écran (l'admin modifie l'horaire directement).
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1166,6 +1177,7 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 ### 10 octobre 2026
 - **Connexion par numéro de téléphone** (7.40), à la demande explicite de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` (migration écrite à la main `20261010120000_user_phone` : courriel facultatif + colonne `phone`). Nouveaux : `lib/phone.ts`, `app/api/users/[id]/phone/route.ts`. Modifiés : `prisma/schema.prisma`, `lib/{auth,activity-log}.ts`, `lib/validations/auth.ts`, `lib/i18n/messages/{fr,en}.ts`, `app/api/auth/{join,forgot-password}/route.ts`, `app/api/exports/employees/route.ts`, `app/dashboard/employees/page.tsx`, `components/auth/{LoginForm,JoinForm}.tsx`, `components/dashboard/{EmployeesTable,AdminsCard,RecordDepartureForm}.tsx`.
 - **Correctif modales sur téléphone** (7.41) : modales des Horaires et du téléphone employé rendues dans `<body>` via `components/ui/Portal.tsx` (elles s'ouvraient hors écran à cause du `transform` du conteneur animé). Nouveau : `components/ui/Portal.tsx`. Modifiés : `components/dashboard/{ScheduleBoard,EmployeesTable}.tsx`. Aucune migration.
+- **Échanges de quart** (7.42), à la demande de l'utilisateur. **Migration à appliquer** : `npx prisma migrate deploy` puis `npx prisma generate` (migration écrite à la main `20261011120000_add_shift_swaps`). Nouveaux : `lib/shift-swaps.ts`, `app/api/shift-swaps/route.ts`, `app/api/shift-swaps/[id]/route.ts`, `components/dashboard/ShiftSwaps.tsx`. Modifiés : `prisma/schema.prisma`, `middleware.ts`, `lib/activity-log.ts`, `lib/validations/schedule.ts`, `lib/i18n/messages/{fr,en}.ts`, `app/api/shifts/[id]/route.ts`, `app/dashboard/schedule/page.tsx`.
 
 ## 14. Refonte esthétique (en cours)
 

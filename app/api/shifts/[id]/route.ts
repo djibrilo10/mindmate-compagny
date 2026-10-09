@@ -3,6 +3,7 @@ import { requireAuth, handleAuthError } from "@/lib/session-guard";
 import { shiftSchema } from "@/lib/validations/schedule";
 import { canScheduleUser, findOverlappingShift, formatMinutes, mondayOf, parseTime } from "@/lib/schedule";
 import { notifyUsersLocalized } from "@/lib/notifications";
+import { cancelActiveSwaps } from "@/lib/shift-swaps";
 
 // ------------------------------------------------------------
 // PATCH /api/shifts/[id]  -> modifie un quart
@@ -67,6 +68,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       where: { id: existing.id },
       data: { userId, date, startMinute, endMinute, position: position || null, note: note || null },
     });
+    // Personne, jour ou heures changés : un échange en cours (AUDIT.md 7.42)
+    // ne correspond plus au quart -> il est annulé.
+    if (
+      userId !== existing.userId ||
+      date !== existing.date ||
+      startMinute !== existing.startMinute ||
+      endMinute !== existing.endMinute
+    ) {
+      await cancelActiveSwaps(existing.id);
+    }
 
     if (existing.publishedAt) {
       await prisma.auditLog.create({

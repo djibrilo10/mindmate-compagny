@@ -42,4 +42,15 @@ export const copyWeekSchema = z.object({
   toWeek: z.string().refine(isDateString, "schedule.errors.dateInvalid"),
 });
 
+// Échanges de quart (AUDIT.md 7.42). targetUserId "" = tout son département.
+export const swapCreateSchema = z.object({
+  shiftId: z.string().min(1, "schedule.swap.errors.notFound"),
+  targetUserId: z.string().default(""),
+  note: z.string().trim().max(300, "schedule.errors.noteTooLong").default(""),
+});
+
+export const swapActionSchema = z.object({
+  action: z.enum(["accept", "decline", "cancel", "approve", "reject"]),
+});
+
 export type ShiftInput = z.infer<typeof shiftSchema>;
