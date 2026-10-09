@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/password";
 import { registerSchema } from "@/lib/validations/auth";
 import { slugify } from "@/lib/slug";
 import { getI18n } from "@/lib/i18n/server";
+import { trialEndFrom } from "@/lib/trial";
 
 export async function POST(request: Request) {
   // Langue de la page d'inscription (bouton FR/EN ou navigateur) : sert aux
@@ -56,7 +57,8 @@ export async function POST(request: Request) {
     // ou un admin sans organisation, même en cas d'erreur en cours de route.
     await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
-        data: { name: organizationName, slug, defaultLocale: locale },
+        // Essai gratuit de 30 jours (AUDIT.md 7.44).
+        data: { name: organizationName, slug, defaultLocale: locale, plan: "trial", trialEndsAt: trialEndFrom(new Date()) },
       });
 
       const generalDepartment = await tx.department.create({

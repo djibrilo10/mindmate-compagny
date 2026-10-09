@@ -280,6 +280,14 @@ export const fr = {
       createCompany: "Créer mon entreprise",
     },
   },
+  trial: {
+    endingSoon: {
+      one: "Votre essai gratuit de Mindmate se termine demain ({date}). Pour continuer sans interruption, écrivez-nous.",
+      other: "Votre essai gratuit de Mindmate se termine dans {count} jours ({date}). Pour continuer sans interruption, écrivez-nous.",
+    },
+    ended: "Votre essai gratuit de Mindmate est terminé. Écrivez-nous pour continuer à utiliser l'application.",
+    contact: "Nous écrire",
+  },
   demo: {
     banner: "Vous visitez une démo : entreprise et personnes fictives. Les modifications sont désactivées.",
     request: "Demander une démo",

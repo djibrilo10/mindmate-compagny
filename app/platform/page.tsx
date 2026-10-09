@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, Building, ShieldOff, TrendingUp, Users, type LucideIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { trialInfo } from "@/lib/trial";
 
 // ------------------------------------------------------------
 // Vue d'ensemble du SUPER_ADMIN (vous) — voir AUDIT.md 7.20. Ces requêtes
@@ -56,7 +57,7 @@ export default async function PlatformOverviewPage() {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const [totalOrganizations, activeOrganizations, suspendedOrganizations, totalEmployees, newThisMonth, recentOrganizations] =
+  const [totalOrganizations, activeOrganizations, suspendedOrganizations, totalEmployees, newThisMonth, recentOrganizations, trials] =
     await Promise.all([
       prisma.organization.count(),
       prisma.organization.count({ where: { status: "ACTIVE" } }),
@@ -75,6 +76,14 @@ export default async function PlatformOverviewPage() {
           createdAt: true,
           _count: { select: { users: true } },
         },
+      }),
+      // Essais gratuits en cours ou terminés sans décision (AUDIT.md 7.44),
+      // ceux qui finissent le plus tôt en premier.
+      prisma.organization.findMany({
+        where: { isDemo: false, trialEndsAt: { not: null } },
+        orderBy: { trialEndsAt: "asc" },
+        take: 8,
+        select: { id: true, name: true, slug: true, trialEndsAt: true, _count: { select: { users: true } } },
       }),
     ]);
 
@@ -106,6 +115,39 @@ export default async function PlatformOverviewPage() {
           ? "Aucune nouvelle organisation ce mois-ci."
           : `${newThisMonth} nouvelle${newThisMonth > 1 ? "s" : ""} organisation${newThisMonth > 1 ? "s" : ""} ce mois-ci.`}
       </p>
+
+      {trials.length > 0 && (
+        <div className="animate-fade-in-up mt-8 overflow-hidden rounded-xl border border-[#E2E4E9] bg-white" style={{ animationDelay: "0.22s" }}>
+          <div className="flex items-center justify-between border-b border-[#E2E4E9] px-5 py-4">
+            <h2 className="text-sm font-medium text-[#1C2438]">Essais gratuits</h2>
+            <Link href="/platform/organizations" className="text-sm text-[#2F6F5E] hover:underline">
+              Gérer
+            </Link>
+          </div>
+          <ul>
+            {trials.map((org) => {
+              const info = trialInfo(org.trialEndsAt);
+              const tone =
+                info.state === "ended" ? "bg-[#FDECEC] text-[#8A3B3B]" : info.state === "ending" ? "bg-[#FDF3E3] text-[#8A6A1C]" : "bg-[#E7F3EF] text-[#2F6F5E]";
+              const label =
+                info.state === "ended"
+                  ? "Terminé : à décider"
+                  : `${info.daysLeft} jour${(info.daysLeft ?? 0) > 1 ? "s" : ""} restant${(info.daysLeft ?? 0) > 1 ? "s" : ""}`;
+              return (
+                <li key={org.id} className="flex items-center justify-between gap-4 border-b border-[#F0F1F4] px-5 py-3 last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[#1C2438]">{org.name}</p>
+                    <p className="truncate text-xs text-[#5B6478]">
+                      {org.slug} · {org._count.users} employé{org._count.users > 1 ? "s" : ""} · fin le {formatDate(org.trialEndsAt!)}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${tone}`}>{label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div
         className="animate-fade-in-up mt-8 overflow-hidden rounded-xl border border-[#E2E4E9] bg-white"

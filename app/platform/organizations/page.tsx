@@ -18,6 +18,8 @@ export default async function PlatformOrganizationsPage() {
       plan: true,
       status: true,
       createdAt: true,
+      isDemo: true,
+      trialEndsAt: true,
       _count: { select: { users: true } },
     },
   });
@@ -30,6 +32,8 @@ export default async function PlatformOrganizationsPage() {
     status: org.status,
     createdAt: org.createdAt.toISOString(),
     employeeCount: org._count.users,
+    isDemo: org.isDemo,
+    trialEndsAt: org.trialEndsAt?.toISOString() ?? null,
   }));
 
   return (
@@ -43,7 +47,7 @@ export default async function PlatformOrganizationsPage() {
             Organisations
           </h1>
           <p className="mt-0.5 text-sm text-[#5B6478]">
-            {rows.length} organisation{rows.length > 1 ? "s" : ""} cliente{rows.length > 1 ? "s" : ""}. Suspendez un accès en cas de non-paiement.
+            {rows.length} organisation{rows.length > 1 ? "s" : ""} cliente{rows.length > 1 ? "s" : ""}. Chaque nouvelle entreprise a 30 jours d&apos;essai gratuit : tu es prévenu 5 jours avant la fin.
           </p>
         </div>
       </div>

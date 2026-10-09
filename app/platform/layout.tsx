@@ -5,6 +5,7 @@ import { Fraunces, Inter } from "next/font/google";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { PLATFORM_NOTIFICATION_TYPES, sendDueTrialReminders } from "@/lib/trial";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -33,13 +34,17 @@ export default async function PlatformLayout({ children }: { children: ReactNode
     redirect("/dashboard");
   }
 
+  // Rappels de fin d'essai gratuit (AUDIT.md 7.44) : vérifiés aussi à chaque
+  // visite, en plus du cron quotidien. Ne bloque jamais l'affichage.
+  await sendDueTrialReminders().catch((e) => console.error("[platform] rappels d'essai", e));
+
   const userLabel = user.name || user.email || "Propriétaire";
   // Badge "Support" : demandes avec un message d'admin pas encore lu (7.24).
   const [supportUnread, unreadNotifications] = await Promise.all([
     prisma.supportTicket.count({ where: { unreadByPlatform: true } }),
     // Cloche du propriétaire (7.25) : SES notifications non lues.
     user.id
-      ? prisma.notification.count({ where: { userId: user.id, isRead: false, type: "SUPPORT_MESSAGE" } })
+      ? prisma.notification.count({ where: { userId: user.id, isRead: false, type: { in: PLATFORM_NOTIFICATION_TYPES } } })
       : 0,
   ]);
 

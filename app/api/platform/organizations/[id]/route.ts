@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
-import type { Role } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
+import { TRIAL_DAYS, trialEndFrom } from "@/lib/trial";
 
 const SUPER_ADMIN_ONLY: Role[] = ["SUPER_ADMIN"];
 const VALID_STATUSES = ["ACTIVE", "SUSPENDED"] as const;
@@ -24,6 +25,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const body = await request.json().catch(() => null);
+
+    // Essai gratuit (AUDIT.md 7.44) : { action: "startTrial" | "extendTrial" | "convert", days? }
+    if (body && typeof body.action === "string") {
+      return handleTrialAction(id, body.action, body.days);
+    }
 
     if (!body || !isValidStatus(body.status)) {
       return Response.json({ error: "Statut invalide. Attendu : ACTIVE ou SUSPENDED." }, { status: 400 });
@@ -61,4 +67,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     console.error(error);
     return Response.json({ error: "Erreur serveur" }, { status: 500 });
   }
+}
+
+// ------------------------------------------------------------
+// Essai gratuit (AUDIT.md 7.44), réservé au SUPER_ADMIN (vérifié plus haut) :
+// - startTrial  : (re)démarre un essai de 30 jours à partir d'aujourd'hui ;
+// - extendTrial : ajoute `days` jours (1 à 90, défaut 14) à la fin prévue
+//                 (ou à aujourd'hui si l'essai est déjà fini) ;
+// - convert     : « Client confirmé » -> fin de l'essai, plan "pro".
+// Les rappels sont remis à zéro quand la date de fin change.
+// ------------------------------------------------------------
+async function handleTrialAction(id: string, action: string, rawDays: unknown) {
+  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, isDemo: true, trialEndsAt: true } });
+  if (!org) return Response.json({ error: "Organisation introuvable." }, { status: 404 });
+  if (org.isDemo) return Response.json({ error: "L'entreprise de démonstration n'a pas d'essai." }, { status: 400 });
+
+  const now = new Date();
+  let data: Prisma.OrganizationUpdateInput;
+  if (action === "startTrial") {
+    data = { plan: "trial", trialEndsAt: trialEndFrom(now, TRIAL_DAYS), trialReminderSentAt: null, trialEndedNotifiedAt: null };
+  } else if (action === "extendTrial") {
+    const days = typeof rawDays === "number" && Number.isInteger(rawDays) && rawDays >= 1 && rawDays <= 90 ? rawDays : 14;
+    const base = org.trialEndsAt && org.trialEndsAt > now ? org.trialEndsAt : now;
+    data = { plan: "trial", trialEndsAt: trialEndFrom(base, days), trialReminderSentAt: null, trialEndedNotifiedAt: null };
+  } else if (action === "convert") {
+    data = { plan: "pro", trialEndsAt: null, trialReminderSentAt: null, trialEndedNotifiedAt: null };
+  } else {
+    return Response.json({ error: "Action invalide." }, { status: 400 });
+  }
+
+  const updated = await prisma.organization.update({
+    where: { id },
+    data,
+    select: { plan: true, trialEndsAt: true },
+  });
+  return Response.json({ success: true, plan: updated.plan, trialEndsAt: updated.trialEndsAt?.toISOString() ?? null });
 }

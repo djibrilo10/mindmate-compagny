@@ -108,6 +108,12 @@ model Organization {
   // Entreprise fictive de démonstration (AUDIT.md 7.43) : visitée depuis la
   // page d'accueil (« Voir la démo »), en LECTURE SEULE (middleware.ts).
   isDemo         Boolean   @default(false)
+  // Essai gratuit (AUDIT.md 7.44) : 30 jours à la création de l'entreprise.
+  // null = pas en essai (client confirmé, ou entreprise créée avant). Rappels
+  // au propriétaire 5 jours avant la fin, puis le jour de la fin.
+  trialEndsAt          DateTime?
+  trialReminderSentAt  DateTime?
+  trialEndedNotifiedAt DateTime?
   suspendedAt    DateTime? // date de la dernière suspension, affichée dans /platform/organizations
   // Admin PRINCIPAL de l'organisation (voir AUDIT.md 7.22) : le seul qui peut
   // ajouter/désactiver/retirer/remplacer les 2 co-admins. Nullable pour les

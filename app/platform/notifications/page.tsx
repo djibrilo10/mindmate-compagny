@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Bell } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { PLATFORM_NOTIFICATION_TYPES } from "@/lib/trial";
 import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
 import { NotificationsList } from "@/components/dashboard/NotificationsList";
 import { PushNotificationsToggle } from "@/components/dashboard/PushNotificationsToggle";
@@ -29,7 +30,8 @@ export default async function PlatformNotificationsPage() {
     // Filtre volontaire : avant 7.24, notifyRoles() envoyait aussi au compte
     // SUPER_ADMIN les signalements/sondages de sa propre organisation ; ces
     // anciennes lignes restent en base mais n'ont rien à faire ici.
-    where: { userId: ctx.userId, type: "SUPPORT_MESSAGE" },
+    // + demandes de démo et fins d'essai gratuit (AUDIT.md 7.43, 7.44).
+    where: { userId: ctx.userId, type: { in: PLATFORM_NOTIFICATION_TYPES } },
     orderBy: { createdAt: "desc" },
     take: MAX_NOTIFICATIONS,
   });
@@ -53,7 +55,7 @@ export default async function PlatformNotificationsPage() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-[#1C2438]">Notifications</h1>
           <p className="mt-0.5 text-sm text-[#5B6478]">
-            Messages des admins principaux. Active les alertes sur chaque appareil où tu veux les recevoir.
+            Messages des admins principaux, demandes de démo et fins d&apos;essai. Active les alertes sur chaque appareil où tu veux les recevoir.
           </p>
         </div>
       </div>

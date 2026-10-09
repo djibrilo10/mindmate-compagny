@@ -277,6 +277,14 @@ export const en: Messages = {
       createCompany: "Create my company",
     },
   },
+  trial: {
+    endingSoon: {
+      one: "Your free Mindmate trial ends tomorrow ({date}). To keep going without interruption, write to us.",
+      other: "Your free Mindmate trial ends in {count} days ({date}). To keep going without interruption, write to us.",
+    },
+    ended: "Your free Mindmate trial has ended. Write to us to keep using the app.",
+    contact: "Write to us",
+  },
   demo: {
     banner: "You're visiting a demo: fictional company and people. Changes are disabled.",
     request: "Request a demo",

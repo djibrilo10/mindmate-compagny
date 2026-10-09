@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getI18n } from "@/lib/i18n/server";
 import { getDepartments, needsDepartmentChoice } from "@/lib/departments";
+import { ADMIN_BANNER_DAYS, trialInfo } from "@/lib/trial";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -44,7 +45,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     user.organizationId
       ? prisma.organization.findUnique({
           where: { id: user.organizationId },
-          select: { id: true, name: true, status: true, isDemo: true, logoUpdatedAt: true },
+          select: { id: true, name: true, status: true, isDemo: true, logoUpdatedAt: true, trialEndsAt: true },
         })
       : null,
     user.id
@@ -91,6 +92,14 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     ? { organizationName, departments: await getDepartments(dbUser.organizationId) }
     : null;
 
+  // Essai gratuit (AUDIT.md 7.44) : bandeau pour les admins les 7 derniers
+  // jours, et une fois l'essai terminé (l'accès n'est pas coupé pour autant).
+  const trial = trialInfo(organization?.trialEndsAt);
+  const trialBanner =
+    role === "ORG_ADMIN" && !organization?.isDemo && organization?.trialEndsAt && trial.state !== "none" && (trial.daysLeft ?? 0) <= ADMIN_BANNER_DAYS
+      ? { ended: trial.state === "ended", daysLeft: trial.daysLeft ?? 0, endsAt: organization.trialEndsAt.toISOString() }
+      : null;
+
   return (
     <div className={`${fraunces.variable} ${inter.variable} font-[family-name:var(--font-body)]`}>
       <DashboardShell
@@ -101,6 +110,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         department={dbUser.department}
         departmentPrompt={organization?.isDemo ? null : departmentPrompt}
         isDemo={Boolean(organization?.isDemo)}
+        trialBanner={trialBanner}
         logoVersion={`${organization?.id ?? ""}-${organization?.logoUpdatedAt?.getTime() ?? 0}`}
       >
         {children}
