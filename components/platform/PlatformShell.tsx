@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Building2, LayoutDashboard, LifeBuoy, Menu, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Bell, Building2, Inbox, LayoutDashboard, LifeBuoy, Menu, ShieldCheck, type LucideIcon } from "lucide-react";
 import { SignOutButton } from "@/components/dashboard/SignOutButton";
 
 // ------------------------------------------------------------
@@ -18,6 +18,7 @@ const PLATFORM_NAV: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Vue d'ensemble", href: "/platform", icon: LayoutDashboard },
   { label: "Organisations", href: "/platform/organizations", icon: Building2 },
   { label: "Support", href: "/platform/support", icon: LifeBuoy }, // messages des admins principaux (AUDIT.md 7.24)
+  { label: "Demandes de démo", href: "/platform/demo-requests", icon: Inbox }, // page d'accueil publique (AUDIT.md 7.43)
   { label: "Notifications", href: "/platform/notifications", icon: Bell }, // (AUDIT.md 7.25)
 ];
 

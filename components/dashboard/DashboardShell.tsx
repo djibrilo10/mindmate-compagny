@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { DepartmentPrompt } from "./DepartmentPrompt";
+import { DemoBanner } from "./DemoBanner";
 
 type Role = "SUPER_ADMIN" | "ORG_ADMIN" | "MANAGER" | "EMPLOYEE";
 
@@ -15,6 +16,7 @@ type DashboardShellProps = {
   unreadNotifications: number;
   department?: { name: string; color: string } | null;
   departmentPrompt?: { organizationName: string; departments: { id: string; name: string; color: string }[] } | null;
+  isDemo?: boolean;
   children: ReactNode;
 };
 
@@ -25,6 +27,7 @@ export function DashboardShell({
   unreadNotifications,
   department,
   departmentPrompt,
+  isDemo = false,
   children,
 }: DashboardShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -72,6 +75,7 @@ export function DashboardShell({
           department={department ?? null}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         />
+        {isDemo && <DemoBanner />}
         <main className="flex-1 px-4 py-8 sm:px-8">{children}</main>
         {departmentPrompt && <DepartmentPrompt {...departmentPrompt} />}
       </div>

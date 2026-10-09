@@ -105,6 +105,9 @@ model Organization {
   logoMimeType   String?   // type MIME du logo, ex "image/png" — null tant qu'aucun logo n'a été téléversé
   logoUpdatedAt  DateTime? // sert à invalider le cache navigateur de l'image après un changement (voir GET /api/organization/logo)
   status         OrganizationStatus @default(ACTIVE) // géré depuis /platform par le SUPER_ADMIN (voir AUDIT.md 7.20)
+  // Entreprise fictive de démonstration (AUDIT.md 7.43) : visitée depuis la
+  // page d'accueil (« Voir la démo »), en LECTURE SEULE (middleware.ts).
+  isDemo         Boolean   @default(false)
   suspendedAt    DateTime? // date de la dernière suspension, affichée dans /platform/organizations
   // Admin PRINCIPAL de l'organisation (voir AUDIT.md 7.22) : le seul qui peut
   // ajouter/désactiver/retirer/remplacer les 2 co-admins. Nullable pour les
@@ -926,4 +929,26 @@ model ShiftSwap {
   @@index([organizationId, status])
   @@index([shiftId])
   @@map("shift_swaps")
+}
+
+// ------------------------------------------------------------
+// DEMO REQUEST — formulaire « Demander une démo » de la page d'accueil
+// publique (AUDIT.md 7.43). Visible par le propriétaire dans
+// /platform/demo-requests ; il reçoit aussi un courriel.
+// ------------------------------------------------------------
+model DemoRequest {
+  id          String    @id @default(cuid())
+  name        String
+  company     String
+  email       String
+  phone       String?
+  companySize String?   // "1-10" | "11-50" | "51-200" | "200+"
+  message     String?
+  locale      String    @default("fr")
+  handledAt   DateTime? // marqué « traité » par le propriétaire
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([email])
+  @@map("demo_requests")
 }

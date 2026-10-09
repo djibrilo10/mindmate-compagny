@@ -45,7 +45,8 @@ export async function POST(request: Request) {
     where: { inviteCode: normalizedCode },
   });
 
-  if (!organization) {
+  // L'entreprise de démonstration (AUDIT.md 7.43) n'accepte aucune inscription.
+  if (!organization || organization.isDemo) {
     return NextResponse.json(
       { error: t("errors.invalidInviteCode") },
       { status: 400 }

@@ -29,7 +29,8 @@ export async function POST(request: Request) {
     const userId = (session?.user as { id?: string } | undefined)?.id;
     if (userId) {
       await prisma.user.updateMany({
-        where: { id: userId, role: { not: "SUPER_ADMIN" } },
+        // Jamais pour les comptes de la démo (partagés par tous les visiteurs, 7.43).
+        where: { id: userId, role: { not: "SUPER_ADMIN" }, organization: { isDemo: false } },
         data: { locale },
       });
     }

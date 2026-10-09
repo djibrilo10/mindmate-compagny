@@ -68,6 +68,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.json({ error: "Accès refusé pour ce rôle" }, { status: 403 });
   }
 
+  // Démo publique (AUDIT.md 7.43) : on peut tout regarder, rien modifier.
+  // Toute requête d'écriture vers l'API est refusée ici, avant d'atteindre
+  // les routes (la déconnexion, /api/auth, n'est pas dans le matcher).
+  if (token.isDemo && pathname.startsWith("/api/") && req.method !== "GET" && req.method !== "HEAD") {
+    return NextResponse.json({ error: "errors.demoReadOnly" }, { status: 403 });
+  }
+
   return NextResponse.next();
 }
 

@@ -3,6 +3,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import { verifyPassword } from "./password";
 import { normalizeLoginIdentifier } from "./validations/auth";
+import { DEMO_ACCOUNTS, DEMO_ORG_SLUG, isDemoRole } from "./demo";
+import { refreshDemoIfStale } from "./demo-seed";
 
 // ------------------------------------------------------------
 // POINT CRITIQUE MULTI-TENANT :
@@ -102,6 +104,36 @@ export const authOptions: NextAuthOptions = {
         };
       },
     }),
+    // Démo publique (AUDIT.md 7.43) : « Voir la démo » sur la page d'accueil
+    // connecte SANS mot de passe à l'un des deux comptes de l'entreprise
+    // fictive — et seulement à ceux-là (organisation isDemo = true). Le token
+    // porte isDemo : middleware.ts refuse alors toute modification.
+    CredentialsProvider({
+      id: "demo",
+      name: "demo",
+      credentials: { role: { label: "Rôle", type: "text" } },
+      async authorize(credentials) {
+        const role = credentials?.role;
+        if (!isDemoRole(role)) return null;
+        // Crée la démo au premier clic, puis la garde à jour (quarts autour d'aujourd'hui).
+        await refreshDemoIfStale(prisma);
+        const organization = await prisma.organization.findUnique({ where: { slug: DEMO_ORG_SLUG } });
+        if (!organization || !organization.isDemo) return null;
+        const user = await prisma.user.findUnique({
+          where: { organizationId_email: { organizationId: organization.id, email: DEMO_ACCOUNTS[role] } },
+        });
+        if (!user || user.status !== "ACTIVE" || user.role === "SUPER_ADMIN") return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`,
+          role: user.role,
+          organizationId: user.organizationId,
+          departmentId: user.departmentId,
+          isDemo: true,
+        };
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {
@@ -112,6 +144,7 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         token.organizationId = (user as any).organizationId;
         token.departmentId = (user as any).departmentId;
+        token.isDemo = Boolean((user as any).isDemo);
       }
       return token;
     },
@@ -122,6 +155,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).organizationId = token.organizationId;
         (session.user as any).departmentId = token.departmentId;
+        (session.user as any).isDemo = Boolean(token.isDemo);
       }
       return session;
     },
