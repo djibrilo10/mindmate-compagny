@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { DEMO_ACCOUNTS, DEMO_ORG_SLUG } from "./demo";
+import { DEMO_LOGO_PNG_BASE64 } from "./demo-logo";
 import { hashPassword } from "./password";
 import { addDays, mondayOf, todayInZone } from "./schedule-time";
 
@@ -76,6 +77,15 @@ export async function ensureDemoOrganization(db: Db) {
   if (!org) {
     org = await db.organization.create({
       data: { name: "Café Boréal (démo)", slug: DEMO_ORG_SLUG, isDemo: true, defaultLocale: "fr" },
+    });
+  }
+
+  // Logo fictif propre à la démo (jamais celui d'une vraie entreprise).
+  const logo = Buffer.from(DEMO_LOGO_PNG_BASE64, "base64");
+  if (!org.logoData || !Buffer.from(org.logoData).equals(logo)) {
+    org = await db.organization.update({
+      where: { id: org.id },
+      data: { logoData: logo, logoMimeType: "image/png", logoUpdatedAt: new Date() },
     });
   }
 

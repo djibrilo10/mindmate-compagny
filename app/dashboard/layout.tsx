@@ -44,7 +44,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     user.organizationId
       ? prisma.organization.findUnique({
           where: { id: user.organizationId },
-          select: { name: true, status: true, isDemo: true },
+          select: { id: true, name: true, status: true, isDemo: true, logoUpdatedAt: true },
         })
       : null,
     user.id
@@ -101,6 +101,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         department={dbUser.department}
         departmentPrompt={organization?.isDemo ? null : departmentPrompt}
         isDemo={Boolean(organization?.isDemo)}
+        logoVersion={`${organization?.id ?? ""}-${organization?.logoUpdatedAt?.getTime() ?? 0}`}
       >
         {children}
       </DashboardShell>

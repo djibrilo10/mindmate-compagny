@@ -17,6 +17,7 @@ type DashboardShellProps = {
   department?: { name: string; color: string } | null;
   departmentPrompt?: { organizationName: string; departments: { id: string; name: string; color: string }[] } | null;
   isDemo?: boolean;
+  logoVersion?: string;
   children: ReactNode;
 };
 
@@ -28,6 +29,7 @@ export function DashboardShell({
   department,
   departmentPrompt,
   isDemo = false,
+  logoVersion = "",
   children,
 }: DashboardShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -49,8 +51,10 @@ export function DashboardShell({
               que soit leur forme (large, carré, etc.) — d'où object-contain
               dans une hauteur fixe plutôt qu'un petit badge carré. */}
           <div className="flex h-16 items-center justify-center rounded-xl bg-white px-3 py-2">
+            {/* ?v= : entreprise + date du logo. Sans ça, le navigateur garde en
+                cache le logo d'une AUTRE entreprise ouverte avant (même adresse). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/api/organization/logo" alt="" aria-hidden className="h-full w-full object-contain" />
+            <img src={`/api/organization/logo?v=${logoVersion}`} alt="" aria-hidden className="h-full w-full object-contain" />
           </div>
           <p className="mt-3 text-center text-xs font-medium uppercase tracking-wider text-[#8891A5]">
             {t("shell.portal")}
