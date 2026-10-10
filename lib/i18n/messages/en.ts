@@ -68,6 +68,7 @@ export const en: Messages = {
   },
 
   auth: {
+    backHome: "Back to home",
     tagline: "One organization, its departments, its employees — all in one place.",
     subtagline: "Reports, absences, schedules and announcements, together in one space for the whole team.",
     fields: {

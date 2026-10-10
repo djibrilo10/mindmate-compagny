@@ -38,10 +38,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const organization = await prisma.organization.findUnique({
       where: { id },
-      select: { id: true, billingStatus: true, billingGraceUntil: true, trialEndsAt: true },
+      select: { id: true, isDemo: true, billingStatus: true, billingGraceUntil: true, trialEndsAt: true },
     });
     if (!organization) {
       return Response.json({ error: "Organisation introuvable." }, { status: 404 });
+    }
+    // La démo publique ne se suspend jamais (AUDIT.md 7.43) : les visiteurs
+    // de la page d'accueil tomberaient sur « Accès suspendu ».
+    if (organization.isDemo && body.status === "SUSPENDED") {
+      return Response.json({ error: "L'entreprise de démonstration ne peut pas être suspendue." }, { status: 400 });
     }
 
     const updated = await prisma.organization.update({

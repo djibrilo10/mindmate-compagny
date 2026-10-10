@@ -122,6 +122,14 @@ export const authOptions: NextAuthOptions = {
         await refreshDemoIfStale(prisma);
         const organization = await prisma.organization.findUnique({ where: { slug: DEMO_ORG_SLUG } });
         if (!organization || !organization.isDemo) return null;
+        // La démo doit toujours rester ouverte : si elle a été suspendue par
+        // erreur (ex. confondue avec une entreprise de test), on la rouvre.
+        if (organization.status === "SUSPENDED") {
+          await prisma.organization.update({
+            where: { id: organization.id },
+            data: { status: "ACTIVE", suspendedAt: null, suspendedReason: null },
+          });
+        }
         const user = await prisma.user.findUnique({
           where: { organizationId_email: { organizationId: organization.id, email: DEMO_ACCOUNTS[role] } },
         });

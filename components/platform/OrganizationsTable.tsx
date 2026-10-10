@@ -195,6 +195,9 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
                     </span>
                   </td>
                   <td className="px-5 py-3">
+                    {org.isDemo && !isSuspended ? (
+                      <span className="text-xs text-[#8891A5]">Démo publique</span>
+                    ) : (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -233,6 +236,7 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
                         </button>
                       )}
                     </div>
+                    )}
                   </td>
                 </tr>
               );

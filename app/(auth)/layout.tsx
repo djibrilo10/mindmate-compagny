@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Fraunces, Inter } from "next/font/google";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { OrgIllustration } from "@/components/auth/OrgIllustration";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getI18n } from "@/lib/i18n/server";
@@ -54,6 +56,13 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
       </aside>
 
       <main className="relative flex items-center justify-center px-6 py-14 sm:px-12">
+        {/* Retour à la page d'accueil publique (démo « Vue gérant » / « Vue employé »). */}
+        <Link
+          href="/"
+          className="absolute left-6 top-6 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-[#2F6F5E] hover:bg-[#E7F3EF] sm:left-12"
+        >
+          <ArrowLeft className="h-4 w-4" /> {t("auth.backHome")}
+        </Link>
         <div className="absolute right-6 top-6 sm:right-12">
           <LanguageSwitcher />
         </div>

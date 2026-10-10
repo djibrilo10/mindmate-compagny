@@ -69,6 +69,7 @@ export const fr = {
   },
 
   auth: {
+    backHome: "Retour à l'accueil",
     tagline: "Une organisation, ses départements, ses employés — au même endroit.",
     subtagline: "Signalements, absences, horaires et annonces, réunis dans un seul espace pour toute l'équipe.",
     fields: {
