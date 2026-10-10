@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LifeBuoy, Crown } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 
 // ------------------------------------------------------------
 // Boîte de réception du propriétaire : demandes envoyées par les admins
@@ -13,6 +14,7 @@ function formatDateTime(date: Date) {
 }
 
 export default async function PlatformSupportPage() {
+  await requirePlatformOwner(); // AUDIT.md 7.50
   const tickets = await prisma.supportTicket.findMany({
     orderBy: [{ unreadByPlatform: "desc" }, { lastMessageAt: "desc" }],
     take: 200,

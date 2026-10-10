@@ -1,5 +1,6 @@
 import { Inbox, Mail, Phone, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 import { DemoRequestHandledButton } from "@/components/platform/DemoRequestHandledButton";
 
 // ------------------------------------------------------------
@@ -13,6 +14,7 @@ function formatDateTime(date: Date) {
 }
 
 export default async function PlatformDemoRequestsPage() {
+  await requirePlatformOwner(); // AUDIT.md 7.50
   const requests = await prisma.demoRequest.findMany({
     orderBy: [{ createdAt: "desc" }],
     take: 300,

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, handleAuthError, ForbiddenError } from "@/lib/session-guard";
@@ -7,9 +8,10 @@ import { isSurveyOpen, submitResponseSchema } from "@/lib/surveys";
 // sondage, une seule fois (voir AUDIT.md 7.23).
 //
 // Anonymat : pour un sondage anonyme, les SurveyAnswer sont créées SANS
-// participationId (et sans date) -> aucun lien possible entre une réponse
-// et une personne, même en lisant la base. La SurveyParticipation, elle,
-// dit seulement "cette personne a déjà répondu".
+// participationId (et sans date) et avec un identifiant ALÉATOIRE (UUID v4,
+// AUDIT.md 7.50) : un cuid() contient l'heure de création, qu'on aurait pu
+// recouper avec la date de la SurveyParticipation en lisant la base.
+// La SurveyParticipation, elle, dit seulement "cette personne a déjà répondu".
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requireAuth();
@@ -76,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
         await tx.surveyAnswer.createMany({
           data: survey.questions.map((question) => ({
+            ...(survey.isAnonymous ? { id: randomUUID() } : {}),
             organizationId: ctx.organizationId,
             surveyId: survey.id,
             questionId: question.id,

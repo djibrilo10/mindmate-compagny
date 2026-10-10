@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { normalizePhone } from "@/lib/phone";
+import { requirePrimaryAdmin } from "@/lib/admins";
 
 // ------------------------------------------------------------
 // PATCH /api/users/[id]/phone { phone } (AUDIT.md 7.40)
@@ -25,9 +26,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const target = await prisma.user.findFirst({
       where: { id, organizationId: ctx.organizationId, ...VISIBLE_USER },
-      select: { id: true, email: true },
+      select: { id: true, email: true, role: true },
     });
     if (!target) return Response.json({ error: "departments.employees.phone.notFound" }, { status: 404 });
+    // Le téléphone d'un AUTRE admin (moyen de connexion) : seul l'admin
+    // principal y touche, comme pour tout ce qui concerne les admins (7.22, 7.50).
+    if (target.role === "ORG_ADMIN" && target.id !== ctx.userId) {
+      await requirePrimaryAdmin(ctx);
+    }
     if (!phone && !target.email) {
       return Response.json({ error: "departments.employees.phone.needOneLogin" }, { status: 400 });
     }

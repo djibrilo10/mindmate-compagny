@@ -1,8 +1,7 @@
-import { redirect } from "next/navigation";
 import { Bell } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { PLATFORM_NOTIFICATION_TYPES } from "@/lib/trial";
-import { requireAuth, UnauthorizedError } from "@/lib/session-guard";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 import { NotificationsList } from "@/components/dashboard/NotificationsList";
 import { PushNotificationsToggle } from "@/components/dashboard/PushNotificationsToggle";
 
@@ -17,13 +16,7 @@ import { PushNotificationsToggle } from "@/components/dashboard/PushNotification
 const MAX_NOTIFICATIONS = 50;
 
 export default async function PlatformNotificationsPage() {
-  let ctx;
-  try {
-    ctx = await requireAuth();
-  } catch (error) {
-    if (error instanceof UnauthorizedError) redirect("/login");
-    throw error;
-  }
+  const ctx = await requirePlatformOwner(); // AUDIT.md 7.50
 
   const notifications = await prisma.notification.findMany({
     // Seulement les notifications propres à la console (messages d'assistance).

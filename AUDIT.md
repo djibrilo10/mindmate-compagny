@@ -1031,6 +1031,18 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - Choix conservés (signalés, non modifiés) : un co-admin peut annuler un départ ; le formulaire « Rejoindre » dit si un courriel est déjà utilisé dans l'entreprise (utile aux employés, limité par le débit) ; pas encore de CAPTCHA (à ajouter si des robots apparaissent malgré les limites).
 - Migration `20261015120000_security_hardening` (colonne `users.passwordChangedAt`, table `rate_limit_hits`).
 
+### 7.50 Vérification de l'isolation entre entreprises et de l'anonymat (10 oct. 2026)
+
+- Demande de l'utilisateur : à la place d'un scan ZAP connecté, vérifier dans le code qu'une entreprise ne peut jamais accéder aux données d'une autre. Revue des 78 routes `app/api/**`, des pages et layouts, du middleware et des helpers de `lib/`.
+- **Résultat : aucune faille d'isolation entre entreprises.** Chaque lecture/écriture par id est filtrée par `organizationId` (ou par un parent déjà filtré), et chaque identifiant étranger reçu (employé, département, type de congé, quart, option de sondage, etc.) est vérifié dans l'entreprise avant d'être utilisé.
+- Correctifs (anonymat et droits à l'intérieur d'une entreprise) :
+  - **Signalements et avis anonymes ré-identifiables via l'historique** : `REPORT_CREATED` / `REVIEW_SUBMITTED` gardaient l'auteur (`actorId`), l'id et la note → un admin pouvait recouper avec l'heure du signalement. Désormais, pour un contenu anonyme : ni auteur, ni id, ni note (`app/api/{reports,reviews}/route.ts`). Migration `20261016120000_anonymous_activity_purge` qui efface ces informations des lignes existantes.
+  - **Sondage anonyme désanonymisable par soustraction** (`lib/surveys.ts`) : total global − départements visibles = réponses du département masqué. Si ce « reste » compte moins de `MIN_GROUP_SIZE` répondants, les plus petits départements visibles sont masqués aussi.
+  - **Réponses de sondage anonymes** : identifiant aléatoire (UUID v4) au lieu d'un cuid qui contient l'heure de création (recoupement possible en lisant la base).
+  - **Téléphone d'un admin** (`/api/users/[id]/phone`) : un co-admin ne peut plus changer le téléphone (moyen de connexion) de l'admin principal ou d'un autre co-admin ; réservé à l'admin principal (règle 7.22).
+  - **Pages `/platform`** : chaque page appelle `requirePlatformOwner()` (`lib/platform-guard.ts`), qui relit le compte en base (statut, rôle, `passwordChangedAt`) au lieu de se fier au seul jeton de session.
+- Choix conservé : `/api/push/subscribe` réattribue un abonnement push au dernier utilisateur connecté sur le même navigateur (cas normal d'un appareil partagé) ; l'adresse d'abonnement n'est jamais exposée par l'app.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1258,6 +1270,8 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - **Entreprise interne jamais facturée** (7.45) : l'organisation qui contient le compte SUPER_ADMIN (« Mindmate Compagny ») n'affiche plus la carte « Abonnement » et `/api/billing/checkout` la refuse (`isInternalOrganization`, `lib/billing.ts`). Aucune migration.
 - **Suppression définitive d'une organisation suspendue** depuis l'espace propriétaire (7.48). Aucune migration. Modifiés : `app/api/platform/organizations/[id]/route.ts`, `app/platform/organizations/page.tsx`, `components/platform/OrganizationsTable.tsx`.
 - **Revue de sécurité + correctifs** (7.49). **Migration à appliquer** : `npx prisma migrate deploy` puis `npx prisma generate` (`20261015120000_security_hardening`). Nouveau : `lib/rate-limit.ts`. Modifiés : `next.config.ts`, `middleware.ts`, `prisma/schema.prisma`, `lib/{auth,session-guard,attachments,csv,email,password-reset}.ts`, `app/dashboard/layout.tsx`, `components/auth/LoginForm.tsx`, `app/api/auth/{register,join,join/departments,forgot-password,reset-password}/route.ts`, `app/api/demo-request/route.ts`, `app/api/files/[id]/route.ts`, `app/api/announcements/[id]/attachments/[attachmentId]/route.ts`, `app/api/organization/logo/route.ts`, `app/api/push/subscribe/route.ts`, `app/api/shift-swaps/[id]/route.ts`, `lib/i18n/messages/{fr,en}.ts`.
+- **Mise à jour des dépendances** : Next.js 16.3.5 → 16.4.0 (et `eslint-config-next`), `npm audit fix` (sharp, source-map-js). Reste signalé par `npm audit` : `deepmerge-ts` (outil Prisma, ligne de commande seulement) et `braces` (ESLint, développement seulement) — acceptés. Ne jamais utiliser `npm audit fix --force`. Next 16.4 annonce que `middleware.ts` deviendra `proxy.ts` (à faire plus tard). Aucune migration.
+- **Isolation entre entreprises vérifiée + anonymat renforcé** (7.50). **Migration à appliquer** : `npx prisma migrate deploy` (`20261016120000_anonymous_activity_purge`, données seulement). Nouveau : `lib/platform-guard.ts`. Modifiés : `app/api/{reports,reviews}/route.ts`, `app/api/surveys/[id]/responses/route.ts`, `app/api/users/[id]/phone/route.ts`, `lib/surveys.ts`, `app/platform/{page,organizations/page,support/page,support/[id]/page,demo-requests/page,notifications/page}.tsx`.
 
 ## 14. Refonte esthétique (en cours)
 

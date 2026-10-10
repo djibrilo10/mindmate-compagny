@@ -34,12 +34,15 @@ export async function POST(request: Request) {
       },
     });
 
+    // Signalement anonyme (AUDIT.md 7.50) : l'historique ne garde NI l'auteur
+    // NI l'identifiant du signalement — sinon un admin pourrait recouper
+    // « Jean a soumis un signalement à 14 h 02 » avec la liste des signalements.
     await prisma.auditLog.create({
       data: {
         organizationId: ctx.organizationId,
-        actorId: ctx.userId,
+        actorId: report.isAnonymous ? null : ctx.userId,
         action: "REPORT_CREATED",
-        targetId: report.id,
+        targetId: report.isAnonymous ? null : report.id,
       },
     });
 

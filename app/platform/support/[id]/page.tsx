@@ -4,11 +4,13 @@ import { ArrowLeft, Crown } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 import { PlatformSupportThread } from "@/components/platform/PlatformSupportThread";
 
 // Détail d'une demande de support côté propriétaire (voir AUDIT.md 7.24).
 // Ouvrir la page marque la demande comme lue.
 export default async function PlatformSupportTicketPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePlatformOwner(); // AUDIT.md 7.50
   const { id } = await params;
 
   const ticket = await prisma.supportTicket.findUnique({

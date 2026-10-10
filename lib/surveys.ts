@@ -194,6 +194,20 @@ export async function getSurveyResults(surveyId: string, organizationId: string)
         })),
       });
     }
+    // Anti-« soustraction » (AUDIT.md 7.50) : total global − départements
+    // visibles = réponses des départements masqués. Si ce reste compte moins
+    // de MIN_GROUP_SIZE personnes (ex. un seul employé au Bureau), on masque
+    // aussi les plus petits départements visibles jusqu'à ce que le reste soit
+    // assez grand pour ne plus désigner personne.
+    if (survey.isAnonymous && hiddenDepartments > 0) {
+      const visibleTotal = deptRows.reduce((sum, d) => sum + d.respondents, 0);
+      let hiddenTotal = total - visibleTotal;
+      deptRows.sort((a, b) => a.respondents - b.respondents);
+      while (hiddenTotal > 0 && hiddenTotal < MIN_GROUP_SIZE && deptRows.length > 0) {
+        hiddenTotal += deptRows.shift()!.respondents;
+        hiddenDepartments++;
+      }
+    }
     deptRows.sort((a, b) => b.respondents - a.respondents);
 
     return {

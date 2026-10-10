@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, Building, ShieldOff, TrendingUp, Users, type LucideIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 import { trialInfo } from "@/lib/trial";
 
 // ------------------------------------------------------------
@@ -53,6 +54,7 @@ function formatDate(date: Date): string {
 }
 
 export default async function PlatformOverviewPage() {
+  await requirePlatformOwner(); // AUDIT.md 7.50
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);

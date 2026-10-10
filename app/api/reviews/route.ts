@@ -34,10 +34,12 @@ export async function POST(request: Request) {
     await prisma.auditLog.create({
       data: {
         organizationId: ctx.organizationId,
-        actorId: ctx.userId,
+        // Avis anonyme (AUDIT.md 7.50) : ni auteur, ni identifiant, ni note
+        // dans l'historique — rien qui permette de le relier à quelqu'un.
+        actorId: review.isAnonymous ? null : ctx.userId,
         action: "REVIEW_SUBMITTED",
-        targetId: review.id,
-        metadata: { rating: ratingNum },
+        targetId: review.isAnonymous ? null : review.id,
+        ...(review.isAnonymous ? {} : { metadata: { rating: ratingNum } }),
       },
     });
 

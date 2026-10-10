@@ -1,5 +1,6 @@
 import { Building2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformOwner } from "@/lib/platform-guard";
 import { OrganizationsTable } from "@/components/platform/OrganizationsTable";
 
 // ------------------------------------------------------------
@@ -9,6 +10,7 @@ import { OrganizationsTable } from "@/components/platform/OrganizationsTable";
 // ------------------------------------------------------------
 
 export default async function PlatformOrganizationsPage() {
+  await requirePlatformOwner(); // AUDIT.md 7.50
   const organizations = await prisma.organization.findMany({
     orderBy: { createdAt: "desc" },
     select: {
