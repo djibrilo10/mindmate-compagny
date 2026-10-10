@@ -21,7 +21,7 @@ export const ADMIN_BANNER_DAYS = 7;
 const DAY_MS = 86_400_000;
 
 /** Types des notifications propres à l'espace propriétaire (/platform/notifications). */
-export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED", "BILLING_SUSPENDED"];
+export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED", "BILLING_SUSPENDED", "ORGANIZATION_CREATED"];
 
 export function trialEndFrom(start: Date, days = TRIAL_DAYS) {
   return new Date(start.getTime() + days * DAY_MS);
@@ -40,6 +40,43 @@ export function trialInfo(trialEndsAt: Date | null | undefined, now = new Date()
 
 function formatDay(date: Date) {
   return date.toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Toronto" });
+}
+
+/**
+ * Nouvelle entreprise inscrite (/register) : notification + courriel au(x)
+ * propriétaire(s), pour pouvoir rappeler le client dès les premiers jours
+ * de son essai. Ne fait jamais échouer l'inscription.
+ */
+export async function notifyNewOrganization(org: { name: string; slug: string; trialEndsAt: Date | null; adminName: string; adminEmail: string | null }) {
+  try {
+    const owners = await prisma.user.findMany({
+      where: { role: "SUPER_ADMIN", status: "ACTIVE" },
+      select: { id: true, organizationId: true, email: true },
+    });
+    const title = `Nouvelle entreprise inscrite : ${org.name}`;
+    const trial = org.trialEndsAt ? ` Essai gratuit jusqu'au ${formatDay(org.trialEndsAt)}.` : "";
+    const body = `${org.adminName}${org.adminEmail ? ` (${org.adminEmail})` : ""} vient de créer ${org.name}.${trial}`;
+    await Promise.all(
+      owners.map(async (owner) => {
+        await notifyUser(owner.organizationId, owner.id, {
+          type: "ORGANIZATION_CREATED",
+          title,
+          body,
+          link: "/platform/organizations",
+        }).catch((e) => console.error("[trial] notification non envoyée", e));
+        if (owner.email) {
+          await sendEmail({
+            to: owner.email,
+            subject: title,
+            text: `${body}\n\nIdentifiant : ${org.slug}\nGérer : /platform/organizations`,
+            html: `<p>${escapeHtml(body)}</p><p>Identifiant : <strong>${escapeHtml(org.slug)}</strong></p>`,
+          });
+        }
+      })
+    );
+  } catch (error) {
+    console.error("[trial] avis de nouvelle entreprise non envoyé", error);
+  }
 }
 
 async function notifyOwners(kind: "ending" | "ended", org: { id: string; name: string; slug: string; trialEndsAt: Date }) {

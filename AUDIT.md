@@ -980,6 +980,7 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - `lib/trial.ts` : `trialInfo`, `sendDueTrialReminders` (notification + courriel au(x) SUPER_ADMIN 5 jours avant la fin, puis le jour de la fin ; chaque rappel est « réservé » par un `updateMany` conditionnel, donc jamais envoyé deux fois). Appelé par Vercel Cron `/api/cron/trial-reminders` (chaque jour, `CRON_SECRET`) ET à chaque visite de l'espace propriétaire (`app/platform/layout.tsx`).
 - Rien n'est coupé automatiquement à la fin de l'essai : le propriétaire décide dans `/platform/organizations` (colonne « Essai gratuit » : « +14 jours », « Client confirmé » → plan `"pro"`, « Démarrer un essai de 30 jours » ; ou « Suspendre »). `PATCH /api/platform/organizations/[id]` accepte `{ action: "startTrial" | "extendTrial" | "convert", days }`. Vue d'ensemble : bloc « Essais gratuits ».
 - Admins de l'entreprise : bandeau `TrialBanner` les 7 derniers jours puis après la fin (lien vers Paramètres, « Contacter Djibril »). Textes `trial.*` FR/EN.
+- Nouvelle inscription : `notifyNewOrganization` (notification `ORGANIZATION_CREATED` + courriel au propriétaire, avec la date de fin d'essai), appelée par `/api/auth/register` après la création ; n'empêche jamais l'inscription.
 - Correctif lié : `/platform/notifications` et la cloche du propriétaire n'affichaient que `SUPPORT_MESSAGE` ; ils incluent maintenant `PLATFORM_NOTIFICATION_TYPES` (demandes de démo 7.43 et fins d'essai).
 
 ### 7.45 Facturation par carte (Stripe) + suspension automatique (10 oct. 2026)

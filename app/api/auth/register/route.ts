@@ -4,7 +4,7 @@ import { hashPassword } from "@/lib/password";
 import { registerSchema } from "@/lib/validations/auth";
 import { slugify } from "@/lib/slug";
 import { getI18n } from "@/lib/i18n/server";
-import { trialEndFrom } from "@/lib/trial";
+import { notifyNewOrganization, trialEndFrom } from "@/lib/trial";
 
 export async function POST(request: Request) {
   // Langue de la page d'inscription (bouton FR/EN ou navigateur) : sert aux
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await hashPassword(password);
+  const trialEndsAt = trialEndFrom(new Date());
 
   try {
     // L'organisation et son premier compte admin sont créés dans la même
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
         // Essai gratuit de 30 jours (AUDIT.md 7.44).
-        data: { name: organizationName, slug, defaultLocale: locale, plan: "trial", trialEndsAt: trialEndFrom(new Date()) },
+        data: { name: organizationName, slug, defaultLocale: locale, plan: "trial", trialEndsAt },
       });
 
       const generalDepartment = await tx.department.create({
@@ -96,6 +97,9 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  // Prévient le propriétaire de la plateforme (AUDIT.md 7.44).
+  await notifyNewOrganization({ name: organizationName, slug, trialEndsAt, adminName: `${firstName} ${lastName}`, adminEmail: email ?? null });
 
   return NextResponse.json({ success: true, slug }, { status: 201 });
 }
