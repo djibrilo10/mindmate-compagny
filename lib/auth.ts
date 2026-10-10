@@ -89,7 +89,10 @@ export const authOptions: NextAuthOptions = {
         // identifiants. Le SUPER_ADMIN (vous) n'est jamais bloqué par le
         // statut de sa propre organisation interne (voir AUDIT.md 7.20,
         // même exception que dans lib/session-guard.ts).
-        if (user.role !== "SUPER_ADMIN" && organization.status === "SUSPENDED") {
+        // Exception (AUDIT.md 7.45) : suspension AUTOMATIQUE pour non-paiement ->
+        // l'admin peut se connecter pour payer (il atterrit sur /suspended).
+        const canPayToReactivate = user.role === "ORG_ADMIN" && organization.suspendedReason === "billing";
+        if (user.role !== "SUPER_ADMIN" && organization.status === "SUSPENDED" && !canPayToReactivate) {
           throw new Error("Cette organisation est suspendue. Contactez votre administrateur.");
         }
 

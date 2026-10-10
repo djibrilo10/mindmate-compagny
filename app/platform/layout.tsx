@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { PLATFORM_NOTIFICATION_TYPES, sendDueTrialReminders } from "@/lib/trial";
+import { runDailyBilling } from "@/lib/billing";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -37,6 +38,7 @@ export default async function PlatformLayout({ children }: { children: ReactNode
   // Rappels de fin d'essai gratuit (AUDIT.md 7.44) : vérifiés aussi à chaque
   // visite, en plus du cron quotidien. Ne bloque jamais l'affichage.
   await sendDueTrialReminders().catch((e) => console.error("[platform] rappels d'essai", e));
+  await runDailyBilling().catch((e) => console.error("[platform] facturation", e));
 
   const userLabel = user.name || user.email || "Propriétaire";
   // Badge "Support" : demandes avec un message d'admin pas encore lu (7.24).

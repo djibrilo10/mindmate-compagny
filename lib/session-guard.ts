@@ -32,7 +32,7 @@ export class OrganizationSuspendedError extends Error {}
  * temps réel, pas l'expiration du token).
  * -> organizationId vient TOUJOURS du token signé, jamais du body/query envoyé par le client.
  */
-export async function requireAuth(): Promise<AuthContext> {
+export async function requireAuth(options: { allowBillingSuspended?: boolean } = {}): Promise<AuthContext> {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     throw new UnauthorizedError("Non authentifié");
@@ -54,7 +54,7 @@ export async function requireAuth(): Promise<AuthContext> {
       status: true,
       organizationId: true,
       departmentId: true,
-      organization: { select: { status: true } },
+      organization: { select: { status: true, suspendedReason: true } },
     },
   });
   if (!dbUser || dbUser.status !== "ACTIVE" || dbUser.organizationId !== sessionUser.organizationId) {
@@ -64,7 +64,12 @@ export async function requireAuth(): Promise<AuthContext> {
   // Le SUPER_ADMIN (vous) gère TOUTES les organisations clientes depuis
   // /platform — son accès ne doit jamais dépendre du statut de SA PROPRE
   // organisation interne (voir AUDIT.md 7.20).
-  if (dbUser.role !== "SUPER_ADMIN" && dbUser.organization.status === "SUSPENDED") {
+  // Exception (AUDIT.md 7.45) : suspendue AUTOMATIQUEMENT pour non-paiement,
+  // l'admin peut quand même appeler les routes de paiement (/api/billing/*)
+  // pour régler et réactiver lui-même l'accès.
+  const billingException =
+    options.allowBillingSuspended && dbUser.role === "ORG_ADMIN" && dbUser.organization.suspendedReason === "billing";
+  if (dbUser.role !== "SUPER_ADMIN" && dbUser.organization.status === "SUSPENDED" && !billingException) {
     throw new OrganizationSuspendedError("Organisation suspendue");
   }
 

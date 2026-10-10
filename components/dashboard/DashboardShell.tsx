@@ -7,6 +7,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
 import { DepartmentPrompt } from "./DepartmentPrompt";
 import { DemoBanner } from "./DemoBanner";
 import { TrialBanner } from "./TrialBanner";
+import type { BillingBanner } from "@/lib/billing";
 
 type Role = "SUPER_ADMIN" | "ORG_ADMIN" | "MANAGER" | "EMPLOYEE";
 
@@ -19,7 +20,7 @@ type DashboardShellProps = {
   departmentPrompt?: { organizationName: string; departments: { id: string; name: string; color: string }[] } | null;
   isDemo?: boolean;
   logoVersion?: string;
-  trialBanner?: { ended: boolean; daysLeft: number; endsAt: string } | null;
+  trialBanner?: BillingBanner | null;
   children: ReactNode;
 };
 
@@ -83,7 +84,7 @@ export function DashboardShell({
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         />
         {isDemo && <DemoBanner />}
-        {trialBanner && <TrialBanner {...trialBanner} />}
+        {trialBanner && <TrialBanner banner={trialBanner} />}
         <main className="flex-1 px-4 py-8 sm:px-8">{children}</main>
         {departmentPrompt && <DepartmentPrompt {...departmentPrompt} />}
       </div>

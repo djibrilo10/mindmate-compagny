@@ -13,6 +13,9 @@ type OrganizationRow = {
   employeeCount: number;
   isDemo: boolean;
   trialEndsAt: string | null;
+  billingStatus: string | null;
+  billingQuantity: number | null;
+  suspendedReason: string | null;
 };
 
 type TrialAction = "startTrial" | "extendTrial" | "convert";
@@ -31,6 +34,12 @@ function formatDate(iso: string): string {
 // Essai gratuit (AUDIT.md 7.44) : jours restants, arrondis au jour supérieur.
 function trialBadge(org: OrganizationRow): { label: string; tone: "green" | "amber" | "red" | "gray" } {
   if (org.isDemo) return { label: "Démo", tone: "gray" };
+  // Abonnement Stripe (AUDIT.md 7.45)
+  const qty = org.billingQuantity ? ` · ${org.billingQuantity} employé${org.billingQuantity > 1 ? "s" : ""}` : "";
+  if (org.billingStatus === "active") return { label: `Abonné${qty}`, tone: "green" };
+  if (org.billingStatus === "trialing") return { label: `Abonné, 1er paiement à la fin de l'essai${qty}`, tone: "green" };
+  if (org.billingStatus === "past_due" || org.billingStatus === "unpaid") return { label: "Paiement en retard", tone: "red" };
+  if (org.billingStatus === "canceled") return { label: "Abonnement arrêté", tone: "red" };
   if (!org.trialEndsAt) return { label: org.plan === "pro" ? "Client confirmé" : "Pas d'essai", tone: org.plan === "pro" ? "green" : "gray" };
   const daysLeft = Math.ceil((new Date(org.trialEndsAt).getTime() - Date.now()) / 86_400_000);
   if (daysLeft <= 0) return { label: `Terminé le ${formatDate(org.trialEndsAt)}`, tone: "red" };
@@ -97,7 +106,9 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
         setError(data?.error ?? "Impossible de mettre à jour cette organisation.");
         return;
       }
-      setOrganizations((prev) => prev.map((o) => (o.id === org.id ? { ...o, status: nextStatus } : o)));
+      setOrganizations((prev) =>
+        prev.map((o) => (o.id === org.id ? { ...o, status: nextStatus, suspendedReason: nextStatus === "SUSPENDED" ? "manual" : null } : o))
+      );
     } catch {
       setError("Impossible de contacter le serveur.");
     } finally {
@@ -180,7 +191,7 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
                         isSuspended ? "bg-[#FDECEC] text-[#8A3B3B]" : "bg-[#E7F3EF] text-[#2F6F5E]"
                       }`}
                     >
-                      {isSuspended ? "Suspendue" : "Active"}
+                      {isSuspended ? (org.suspendedReason === "billing" ? "Suspendue (paiement)" : "Suspendue") : "Active"}
                     </span>
                   </td>
                   <td className="px-5 py-3">

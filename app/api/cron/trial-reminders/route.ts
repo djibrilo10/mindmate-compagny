@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { sendDueTrialReminders } from "@/lib/trial";
+import { runDailyBilling } from "@/lib/billing";
 
 // ------------------------------------------------------------
 // GET /api/cron/trial-reminders -> rappels de fin d'essai gratuit
@@ -25,8 +26,10 @@ export async function GET(request: Request) {
   }
   try {
     const sent = await sendDueTrialReminders();
-    console.log(`[trial-reminders] ${sent} rappel(s) envoyé(s)`);
-    return Response.json({ ok: true, sent });
+    // Facturation (AUDIT.md 7.45) : grâce, suspensions, nombre d'employés.
+    const billing = await runDailyBilling();
+    console.log(`[trial-reminders] ${sent} rappel(s) envoyé(s) · facturation`, billing);
+    return Response.json({ ok: true, sent, billing });
   } catch (error) {
     console.error("[trial-reminders]", error);
     return Response.json({ error: "Erreur serveur" }, { status: 500 });

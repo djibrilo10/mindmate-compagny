@@ -12,6 +12,9 @@ import { PrivacyCard } from "@/components/dashboard/PrivacyCard";
 import { LanguageCard } from "@/components/dashboard/LanguageCard";
 import { LeaveTypesCard } from "@/components/dashboard/LeaveTypesCard";
 import { DepartmentsCard } from "@/components/dashboard/DepartmentsCard";
+import { BillingCard, type BillingCardState } from "@/components/dashboard/BillingCard";
+import { countBillableEmployees, isPaid } from "@/lib/billing";
+import { billingConfigured, stripeRequest } from "@/lib/stripe";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { getLeaveTypes } from "@/lib/leave";
 import { leaveTypeLabel } from "@/lib/leave-format";
@@ -22,7 +25,18 @@ import { eligibleRespondentsWhere, isSurveyOpen } from "@/lib/surveys";
 
 const ADMIN_ROLES = ["ORG_ADMIN", "SUPER_ADMIN"];
 
-export default async function SettingsPage() {
+/** Prix affiché (« 4,00 $ ») lu chez Stripe ; null si indisponible. */
+async function stripePriceLabel(locale: string) {
+  try {
+    const price = await stripeRequest<{ unit_amount: number | null; currency: string }>("GET", `/prices/${process.env.STRIPE_PRICE_ID}`);
+    if (price.unit_amount == null) return null;
+    return new Intl.NumberFormat(locale === "en" ? "en-CA" : "fr-CA", { style: "currency", currency: price.currency.toUpperCase() }).format(price.unit_amount / 100);
+  } catch {
+    return null;
+  }
+}
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ abonnement?: string }> }) {
   let ctx;
   try {
     ctx = await requireAuth();
@@ -50,9 +64,52 @@ export default async function SettingsPage() {
       lastPrivacyPurgeAt: true,
       defaultLocale: true,
       leaveYearStartMonth: true,
+      isDemo: true,
+      plan: true,
+      trialEndsAt: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      billingStatus: true,
+      billingPeriodEnd: true,
+      billingGraceUntil: true,
     },
   });
   if (!organization) redirect("/dashboard");
+
+  // Abonnement (AUDIT.md 7.45) : seulement pour les admins, quand Stripe est
+  // configuré, et jamais pour la démo.
+  let billing: { state: BillingCardState; daysLeft: number | null; date: string | null; employees: number; priceLabel: string | null } | null = null;
+  if (ctx.role === "ORG_ADMIN" && !organization.isDemo && billingConfigured()) {
+    const now = Date.now();
+    const status = organization.billingStatus;
+    const hasSub = Boolean(organization.stripeSubscriptionId);
+    let state: BillingCardState;
+    let date: Date | null = null;
+    if (hasSub && isPaid(status)) {
+      state = status === "trialing" ? "trialing" : "active";
+      date = organization.billingPeriodEnd;
+    } else if (hasSub && (status === "past_due" || status === "unpaid")) {
+      state = "pastDue";
+      date = organization.billingGraceUntil;
+    } else if (hasSub && status === "canceled") {
+      state = "canceled";
+      date = organization.billingGraceUntil;
+    } else if (organization.trialEndsAt && organization.trialEndsAt.getTime() > now) {
+      state = "trial";
+      date = organization.trialEndsAt;
+    } else if (organization.trialEndsAt) {
+      state = "trialEnded";
+    } else if (organization.plan === "pro" && !hasSub) {
+      state = "manual";
+    } else {
+      state = "none";
+    }
+    const daysLeft = organization.trialEndsAt ? Math.max(0, Math.ceil((organization.trialEndsAt.getTime() - now) / 86_400_000)) : null;
+    const { locale } = await getI18n();
+    const [employees, priceLabel] = await Promise.all([countBillableEmployees(ctx.organizationId), stripePriceLabel(locale)]);
+    billing = { state, daysLeft, date: date?.toISOString() ?? null, employees, priceLabel };
+  }
+  const billingThanks = (await searchParams).abonnement === "merci";
 
   // Génération paresseuse : première visite de cette page pour une
   // organisation créée avant cette fonctionnalité (voir aussi
@@ -216,6 +273,12 @@ export default async function SettingsPage() {
       </div>
 
       <div className="flex flex-col gap-6">
+        {billing && (
+          <div id="abonnement" className="animate-fade-in-up stagger-1 scroll-mt-20">
+            <BillingCard {...billing} hasCustomer={Boolean(organization.stripeCustomerId)} thanks={billingThanks} />
+          </div>
+        )}
+
         <div className="animate-fade-in-up stagger-1">
           <LogoUploadCard
             hasCustomLogo={Boolean(organization.logoMimeType)}

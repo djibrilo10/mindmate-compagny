@@ -8,8 +8,10 @@ import { notifyUser } from "@/lib/notifications";
 //   trialEndsAt = création + 30 jours.
 // - Le propriétaire (SUPER_ADMIN) est prévenu automatiquement, par
 //   notification ET courriel : 5 jours avant la fin, puis le jour de la fin.
-// - À la fin, RIEN n'est coupé automatiquement : le propriétaire choisit
-//   dans /platform/organizations (prolonger, « Client confirmé » ou suspendre).
+// - À la fin : 7 jours de grâce puis suspension automatique si l'entreprise
+//   ne s'est pas abonnée (lib/billing.ts, AUDIT.md 7.45 — seulement quand
+//   Stripe est configuré). Le propriétaire peut aussi prolonger ou marquer
+//   « Client confirmé » dans /platform/organizations.
 // - L'admin de l'entreprise voit un bandeau les 7 derniers jours.
 // ------------------------------------------------------------
 
@@ -19,7 +21,7 @@ export const ADMIN_BANNER_DAYS = 7;
 const DAY_MS = 86_400_000;
 
 /** Types des notifications propres à l'espace propriétaire (/platform/notifications). */
-export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED"];
+export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED", "BILLING_SUSPENDED"];
 
 export function trialEndFrom(start: Date, days = TRIAL_DAYS) {
   return new Date(start.getTime() + days * DAY_MS);
@@ -84,7 +86,11 @@ export async function sendDueTrialReminders(now = new Date()) {
     where: {
       isDemo: false,
       trialEndsAt: { not: null, lte: soon },
-      OR: [{ trialReminderSentAt: null }, { trialEndsAt: { lte: now }, trialEndedNotifiedAt: null }],
+      AND: [
+        { OR: [{ trialReminderSentAt: null }, { trialEndsAt: { lte: now }, trialEndedNotifiedAt: null }] },
+        // Déjà abonnée par carte (AUDIT.md 7.45) : pas de rappel.
+        { OR: [{ billingStatus: null }, { billingStatus: { notIn: ["active", "trialing"] } }] },
+      ],
     },
     select: { id: true, name: true, slug: true, trialEndsAt: true, trialReminderSentAt: true, trialEndedNotifiedAt: true },
     take: 50,

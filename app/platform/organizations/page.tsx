@@ -20,6 +20,9 @@ export default async function PlatformOrganizationsPage() {
       createdAt: true,
       isDemo: true,
       trialEndsAt: true,
+      billingStatus: true,
+      billingQuantity: true,
+      suspendedReason: true,
       _count: { select: { users: true } },
     },
   });
@@ -34,6 +37,9 @@ export default async function PlatformOrganizationsPage() {
     employeeCount: org._count.users,
     isDemo: org.isDemo,
     trialEndsAt: org.trialEndsAt?.toISOString() ?? null,
+    billingStatus: org.billingStatus,
+    billingQuantity: org.billingQuantity,
+    suspendedReason: org.suspendedReason,
   }));
 
   return (

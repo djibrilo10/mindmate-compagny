@@ -114,6 +114,15 @@ model Organization {
   trialEndsAt          DateTime?
   trialReminderSentAt  DateTime?
   trialEndedNotifiedAt DateTime?
+  // Facturation Stripe (AUDIT.md 7.45) : par employé actif / mois.
+  stripeCustomerId         String?   @unique
+  stripeSubscriptionId     String?   @unique
+  stripeSubscriptionItemId String?
+  billingStatus            String?   // statut Stripe : trialing | active | past_due | unpaid | canceled | incomplete…
+  billingQuantity          Int?      // employés actifs facturés
+  billingPeriodEnd         DateTime? // prochain paiement
+  billingGraceUntil        DateTime? // suspension automatique à cette date si rien n'est payé
+  suspendedReason          String?   // "billing" (automatique, réactivée dès le paiement) | "manual"
   suspendedAt    DateTime? // date de la dernière suspension, affichée dans /platform/organizations
   // Admin PRINCIPAL de l'organisation (voir AUDIT.md 7.22) : le seul qui peut
   // ajouter/désactiver/retirer/remplacer les 2 co-admins. Nullable pour les

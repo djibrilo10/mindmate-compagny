@@ -103,6 +103,7 @@ export const config = {
     "/api/shifts/:path*",
     "/api/schedule-files/:path*",
     "/api/shift-swaps/:path*",
+    "/api/billing/:path*",
     "/platform/:path*",
     "/api/platform/:path*",
     "/suspended",

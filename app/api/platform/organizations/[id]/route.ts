@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import type { Prisma, Role } from "@prisma/client";
 import { TRIAL_DAYS, trialEndFrom } from "@/lib/trial";
+import { GRACE_DAYS, isPaid } from "@/lib/billing";
 
 const SUPER_ADMIN_ONLY: Role[] = ["SUPER_ADMIN"];
 const VALID_STATUSES = ["ACTIVE", "SUSPENDED"] as const;
@@ -35,7 +36,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return Response.json({ error: "Statut invalide. Attendu : ACTIVE ou SUSPENDED." }, { status: 400 });
     }
 
-    const organization = await prisma.organization.findUnique({ where: { id }, select: { id: true } });
+    const organization = await prisma.organization.findUnique({
+      where: { id },
+      select: { id: true, billingStatus: true, billingGraceUntil: true, trialEndsAt: true },
+    });
     if (!organization) {
       return Response.json({ error: "Organisation introuvable." }, { status: 404 });
     }
@@ -45,6 +49,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data: {
         status: body.status,
         suspendedAt: body.status === "SUSPENDED" ? new Date() : null,
+        // Suspension à la main = "manual" (jamais levée par un paiement).
+        // Réactivation à la main : 7 nouveaux jours de grâce si l'entreprise
+        // n'a toujours pas payé (sinon la tâche quotidienne la resuspendrait).
+        suspendedReason: body.status === "SUSPENDED" ? "manual" : null,
+        ...(body.status === "ACTIVE" && !isPaid(organization.billingStatus) && (organization.billingGraceUntil || organization.trialEndsAt)
+          ? { billingGraceUntil: new Date(Date.now() + GRACE_DAYS * 86_400_000) }
+          : {}),
       },
       select: { id: true, status: true },
     });
@@ -85,13 +96,15 @@ async function handleTrialAction(id: string, action: string, rawDays: unknown) {
   const now = new Date();
   let data: Prisma.OrganizationUpdateInput;
   if (action === "startTrial") {
-    data = { plan: "trial", trialEndsAt: trialEndFrom(now, TRIAL_DAYS), trialReminderSentAt: null, trialEndedNotifiedAt: null };
+    data = { plan: "trial", trialEndsAt: trialEndFrom(now, TRIAL_DAYS), trialReminderSentAt: null, trialEndedNotifiedAt: null, billingGraceUntil: null };
   } else if (action === "extendTrial") {
     const days = typeof rawDays === "number" && Number.isInteger(rawDays) && rawDays >= 1 && rawDays <= 90 ? rawDays : 14;
     const base = org.trialEndsAt && org.trialEndsAt > now ? org.trialEndsAt : now;
-    data = { plan: "trial", trialEndsAt: trialEndFrom(base, days), trialReminderSentAt: null, trialEndedNotifiedAt: null };
+    data = { plan: "trial", trialEndsAt: trialEndFrom(base, days), trialReminderSentAt: null, trialEndedNotifiedAt: null, billingGraceUntil: null };
   } else if (action === "convert") {
-    data = { plan: "pro", trialEndsAt: null, trialReminderSentAt: null, trialEndedNotifiedAt: null };
+    // Réglé autrement que par carte (virement, chèque…) : plus jamais de
+    // suspension automatique tant qu'il n'y a pas d'abonnement Stripe.
+    data = { plan: "pro", trialEndsAt: null, trialReminderSentAt: null, trialEndedNotifiedAt: null, billingGraceUntil: null };
   } else {
     return Response.json({ error: "Action invalide." }, { status: 400 });
   }
