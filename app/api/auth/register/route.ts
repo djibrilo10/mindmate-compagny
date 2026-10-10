@@ -5,6 +5,8 @@ import { registerSchema } from "@/lib/validations/auth";
 import { slugify } from "@/lib/slug";
 import { getI18n } from "@/lib/i18n/server";
 import { notifyNewOrganization, trialEndFrom } from "@/lib/trial";
+import { buildWelcomeEmail, sendQuietly } from "@/lib/onboarding-emails";
+import { appBaseUrl } from "@/lib/password-reset";
 
 export async function POST(request: Request) {
   // Langue de la page d'inscription (bouton FR/EN ou navigateur) : sert aux
@@ -100,6 +102,13 @@ export async function POST(request: Request) {
 
   // Prévient le propriétaire de la plateforme (AUDIT.md 7.44).
   await notifyNewOrganization({ name: organizationName, slug, trialEndsAt, adminName: `${firstName} ${lastName}`, adminEmail: email ?? null });
+  // Courriel de bienvenue à l'admin : les 3 premières étapes (AUDIT.md 7.46).
+  if (email) {
+    await sendQuietly(
+      buildWelcomeEmail({ to: email, firstName, organizationName, slug, trialEndsAt, baseUrl: appBaseUrl(request), locale }),
+      "bienvenue"
+    );
+  }
 
   return NextResponse.json({ success: true, slug }, { status: 201 });
 }

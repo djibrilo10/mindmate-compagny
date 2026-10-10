@@ -353,6 +353,27 @@ export const fr = {
 
   // Courriels envoyés par l'application (AUDIT.md 7.35).
   email: {
+    welcome: {
+      subject: "Bienvenue sur Mindmate Compagny, {organization} est prête",
+      greeting: "Bonjour {name},",
+      intro: "Votre entreprise {organization} est créée. Votre essai gratuit dure jusqu'au {date} : profitez-en pour l'essayer avec votre vraie équipe.",
+      stepsTitle: "Pour bien démarrer, trois étapes :",
+      step1: "Invitez vos employés : dans Paramètres, partagez votre code d'invitation. Ils s'inscrivent avec leur courriel ou leur numéro de téléphone.",
+      step2: "Faites votre premier horaire : menu Horaires, puis « Ajouter un quart ».",
+      step3: "Envoyez-le : bouton « Envoyer l'horaire ». Chacun le reçoit sur son téléphone.",
+      loginInfo: "Pour vous connecter : identifiant de l'entreprise « {slug} » et votre courriel.",
+      button: "Ouvrir Mindmate",
+      help: "Une question ? Écrivez-nous depuis Paramètres, section « Contacter Djibril ».",
+      footer: "Mindmate Compagny · L'app des équipes sur le terrain",
+    },
+    demoRequest: {
+      subject: "Votre demande de démo Mindmate Compagny",
+      greeting: "Bonjour {name},",
+      intro: "Merci pour votre intérêt ! Nous avons bien reçu votre demande pour {company} et nous vous contactons très bientôt pour planifier une démo de 20 minutes.",
+      tryNow: "En attendant, vous pouvez explorer une entreprise fictive tout de suite, sans inscription : cliquez sur « Vue gérant » ou « Vue employé ».",
+      button: "Voir la démo",
+      footer: "Mindmate Compagny · L'app des équipes sur le terrain",
+    },
     reset: {
       subject: "Réinitialiser ton mot de passe Mindmate",
       greeting: "Bonjour {name},",

@@ -3,6 +3,8 @@ import { demoRequestSchema } from "@/lib/validations/demo-request";
 import { getLocale } from "@/lib/i18n/server";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { notifyUser } from "@/lib/notifications";
+import { buildDemoRequestConfirmation, sendQuietly } from "@/lib/onboarding-emails";
+import { appBaseUrl } from "@/lib/password-reset";
 
 // ------------------------------------------------------------
 // POST /api/demo-request (PUBLIC, AUDIT.md 7.43)
@@ -84,6 +86,12 @@ export async function POST(request: Request) {
           link: "/platform/demo-requests",
         }).catch((e) => console.error("[demo-request] notification non envoyée", e));
       })
+    );
+
+    // Confirmation à la personne, avec le lien vers la démo (AUDIT.md 7.46).
+    await sendQuietly(
+      buildDemoRequestConfirmation({ to: data.email, name: data.name, company: data.company, baseUrl: appBaseUrl(request), locale }),
+      "confirmation de demande de démo"
     );
 
     return Response.json({ ok: true, id: saved.id }, { status: 201 });

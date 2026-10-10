@@ -349,6 +349,27 @@ export const en: Messages = {
   },
 
   email: {
+    welcome: {
+      subject: "Welcome to Mindmate Compagny, {organization} is ready",
+      greeting: "Hi {name},",
+      intro: "Your company {organization} is set up. Your free trial runs until {date}: make the most of it with your real team.",
+      stepsTitle: "To get started, three steps:",
+      step1: "Invite your employees: in Settings, share your invite code. They sign up with their email or phone number.",
+      step2: "Build your first schedule: Schedules menu, then “Add a shift”.",
+      step3: "Send it: “Send the schedule” button. Everyone gets it on their phone.",
+      loginInfo: "To sign in: company ID “{slug}” and your email.",
+      button: "Open Mindmate",
+      help: "Questions? Write to us from Settings, in the “Contact Djibril” section.",
+      footer: "Mindmate Compagny · The app for frontline teams",
+    },
+    demoRequest: {
+      subject: "Your Mindmate Compagny demo request",
+      greeting: "Hi {name},",
+      intro: "Thanks for your interest! We received your request for {company} and will contact you very soon to schedule a 20-minute demo.",
+      tryNow: "In the meantime, you can explore a fictional company right now, no sign-up: click “Manager view” or “Employee view”.",
+      button: "See the demo",
+      footer: "Mindmate Compagny · The app for frontline teams",
+    },
     reset: {
       subject: "Reset your Mindmate password",
       greeting: "Hi {name},",
