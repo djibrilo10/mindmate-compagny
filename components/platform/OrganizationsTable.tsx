@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, CalendarPlus, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CalendarPlus, Loader2, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 
 type OrganizationRow = {
   id: string;
@@ -16,6 +16,7 @@ type OrganizationRow = {
   billingStatus: string | null;
   billingQuantity: number | null;
   suspendedReason: string | null;
+  isInternal: boolean;
 };
 
 type TrialAction = "startTrial" | "extendTrial" | "convert";
@@ -62,6 +63,38 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trialPending, setTrialPending] = useState<string | null>(null);
+
+  // Suppression définitive (AUDIT.md 7.48) : organisation suspendue seulement,
+  // confirmée en retapant son identifiant.
+  async function deleteOrganization(org: OrganizationRow) {
+    const typed = window.prompt(
+      `Supprimer DÉFINITIVEMENT « ${org.name} » et tout son contenu (employés, horaires, messages, fichiers, historique) ?\n\nC'est irréversible. Pour confirmer, tape son identifiant : ${org.slug}`
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== org.slug) {
+      setError("L'identifiant tapé ne correspond pas : rien n'a été supprimé.");
+      return;
+    }
+    setPendingId(org.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/platform/organizations/${org.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmSlug: typed.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? "Suppression impossible.");
+        return;
+      }
+      setOrganizations((prev) => prev.filter((o) => o.id !== org.id));
+    } catch {
+      setError("Impossible de contacter le serveur.");
+    } finally {
+      setPendingId(null);
+    }
+  }
 
   async function trialAction(org: OrganizationRow, action: TrialAction) {
     if (action === "convert" && !window.confirm(`${org.name} devient client confirmé : l'essai s'arrête. Continuer ?`)) return;
@@ -233,6 +266,16 @@ export function OrganizationsTable({ initialOrganizations }: { initialOrganizati
                           className="text-xs text-[#5B6478] hover:text-[#1C2438]"
                         >
                           Annuler
+                        </button>
+                      )}
+                      {isSuspended && !isConfirming && !org.isDemo && !org.isInternal && (
+                        <button
+                          type="button"
+                          onClick={() => deleteOrganization(org)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E8C4C4] px-3 py-1.5 text-xs font-medium text-[#8A3B3B] hover:bg-[#FDECEC] disabled:opacity-60"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Supprimer définitivement
                         </button>
                       )}
                     </div>

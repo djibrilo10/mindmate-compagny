@@ -1008,6 +1008,12 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - Webhook `invoice.paid` → `markInvoicePaid(customer, invoice)` → `sendInvoiceToOwner` (`lib/billing.ts`) pour toute facture d'un montant > 0 (les factures à 0 $ de début d'essai sont ignorées) : courriel (montant, n° de facture, employés facturés, liens « Voir la facture » et « Télécharger le PDF » de Stripe) + notification `BILLING_PAYMENT_RECEIVED`. Le premier paiement d'une entreprise est titré « Premier paiement reçu ».
 - Une ligne d'historique par facture (`BILLING_FIRST_PAYMENT` / `BILLING_PAYMENT`, `targetId` = id de la facture Stripe) : sert à repérer le premier paiement et à ne jamais envoyer deux fois la même facture si Stripe renvoie l'événement.
 
+### 7.48 Suppression définitive d'une organisation (10 oct. 2026)
+
+- Demande de l'utilisateur : pouvoir supprimer pour de bon les organisations de test (suspendre ne supprime rien).
+- `/platform/organizations` : bouton « Supprimer définitivement » sur les organisations SUSPENDUES ; confirmation en retapant l'identifiant (`window.prompt`).
+- `DELETE /api/platform/organizations/[id] { confirmSlug }` (SUPER_ADMIN) : refuse la démo, l'entreprise interne du propriétaire (`isInternalOrganization`) et toute organisation non suspendue ; annule d'abord l'abonnement Stripe s'il est actif (erreur ignorée, ex. abonnement du mode test) ; puis `prisma.organization.delete` (tout le contenu part en cascade). Irréversible ; seule trace : le journal du serveur (Vercel).
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1232,6 +1238,8 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - **Copie des factures payées au propriétaire** (7.47). Aucune migration. Variable facultative `BILLING_NOTIFY_EMAIL`. Modifiés : `lib/billing.ts`, `app/api/stripe/webhook/route.ts`, `lib/trial.ts`, `lib/activity-log.ts`.
 - **Démo protégée contre la suspension** (7.43). Aucune migration. Modifiés : `lib/auth.ts`, `app/api/platform/organizations/[id]/route.ts`, `components/platform/OrganizationsTable.tsx`.
 - **Lien « Retour à l'accueil »** en haut à gauche de toutes les pages de connexion / inscription (`app/(auth)/layout.tsx`, texte `auth.backHome` FR/EN), pour revenir à la page d'accueil et à la démo (7.43). Aucune migration.
+- **Entreprise interne jamais facturée** (7.45) : l'organisation qui contient le compte SUPER_ADMIN (« Mindmate Compagny ») n'affiche plus la carte « Abonnement » et `/api/billing/checkout` la refuse (`isInternalOrganization`, `lib/billing.ts`). Aucune migration.
+- **Suppression définitive d'une organisation suspendue** depuis l'espace propriétaire (7.48). Aucune migration. Modifiés : `app/api/platform/organizations/[id]/route.ts`, `app/platform/organizations/page.tsx`, `components/platform/OrganizationsTable.tsx`.
 
 ## 14. Refonte esthétique (en cours)
 

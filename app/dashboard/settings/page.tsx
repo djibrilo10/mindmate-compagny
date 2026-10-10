@@ -13,7 +13,7 @@ import { LanguageCard } from "@/components/dashboard/LanguageCard";
 import { LeaveTypesCard } from "@/components/dashboard/LeaveTypesCard";
 import { DepartmentsCard } from "@/components/dashboard/DepartmentsCard";
 import { BillingCard, type BillingCardState } from "@/components/dashboard/BillingCard";
-import { countBillableEmployees, isPaid } from "@/lib/billing";
+import { countBillableEmployees, isInternalOrganization, isPaid } from "@/lib/billing";
 import { billingConfigured, stripeRequest } from "@/lib/stripe";
 import { VISIBLE_USER } from "@/lib/visibility";
 import { getLeaveTypes } from "@/lib/leave";
@@ -79,7 +79,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // Abonnement (AUDIT.md 7.45) : seulement pour les admins, quand Stripe est
   // configuré, et jamais pour la démo.
   let billing: { state: BillingCardState; daysLeft: number | null; date: string | null; employees: number; priceLabel: string | null } | null = null;
-  if (ctx.role === "ORG_ADMIN" && !organization.isDemo && billingConfigured()) {
+  if (ctx.role === "ORG_ADMIN" && !organization.isDemo && billingConfigured() && !(await isInternalOrganization(ctx.organizationId))) {
     const now = Date.now();
     const status = organization.billingStatus;
     const hasSub = Boolean(organization.stripeSubscriptionId);

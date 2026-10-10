@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import { getLocale } from "@/lib/i18n/server";
 import { billingConfigured, stripeRequest, StripeError } from "@/lib/stripe";
-import { countBillableEmployees, isPaid } from "@/lib/billing";
+import { countBillableEmployees, isInternalOrganization, isPaid } from "@/lib/billing";
 
 // ------------------------------------------------------------
 // POST /api/billing/checkout (AUDIT.md 7.45) -> { url } de la page de paiement
@@ -29,7 +29,9 @@ export async function POST(request: Request) {
       prisma.user.findUnique({ where: { id: ctx.userId }, select: { email: true } }),
       getLocale(),
     ]);
-    if (!org || org.isDemo) return Response.json({ error: "billing.errors.notAvailable" }, { status: 400 });
+    if (!org || org.isDemo || (await isInternalOrganization(org.id))) {
+      return Response.json({ error: "billing.errors.notAvailable" }, { status: 400 });
+    }
     if (org.stripeSubscriptionId && (isPaid(org.billingStatus) || org.billingStatus === "past_due")) {
       return Response.json({ error: "billing.errors.alreadySubscribed" }, { status: 409 });
     }

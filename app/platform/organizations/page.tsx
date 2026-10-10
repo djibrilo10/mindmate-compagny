@@ -27,6 +27,11 @@ export default async function PlatformOrganizationsPage() {
     },
   });
 
+  // Entreprises internes (contiennent un compte SUPER_ADMIN) : jamais supprimables.
+  const internalIds = new Set(
+    (await prisma.user.findMany({ where: { role: "SUPER_ADMIN" }, select: { organizationId: true } })).map((u) => u.organizationId)
+  );
+
   const rows = organizations.map((org) => ({
     id: org.id,
     name: org.name,
@@ -40,6 +45,7 @@ export default async function PlatformOrganizationsPage() {
     billingStatus: org.billingStatus,
     billingQuantity: org.billingQuantity,
     suspendedReason: org.suspendedReason,
+    isInternal: internalIds.has(org.id),
   }));
 
   return (

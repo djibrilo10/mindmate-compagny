@@ -26,6 +26,16 @@ const DAY_MS = 86_400_000;
 
 export const isPaid = (status: string | null | undefined) => Boolean(status && PAID_STATUSES.includes(status));
 
+/**
+ * Entreprise INTERNE du propriétaire (celle qui contient le compte
+ * SUPER_ADMIN, ex. « Mindmate Compagny ») : jamais facturée, aucune carte
+ * « Abonnement » (AUDIT.md 7.45).
+ */
+export async function isInternalOrganization(organizationId: string) {
+  const owners = await prisma.user.count({ where: { organizationId, role: "SUPER_ADMIN" } });
+  return owners > 0;
+}
+
 /** Employés facturés : comptes actifs de l'entreprise (au moins 1). */
 export async function countBillableEmployees(organizationId: string) {
   const count = await prisma.user.count({ where: { organizationId, status: "ACTIVE", ...VISIBLE_USER } });
