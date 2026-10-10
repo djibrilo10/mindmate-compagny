@@ -21,7 +21,7 @@ export const ADMIN_BANNER_DAYS = 7;
 const DAY_MS = 86_400_000;
 
 /** Types des notifications propres à l'espace propriétaire (/platform/notifications). */
-export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED", "BILLING_SUSPENDED", "ORGANIZATION_CREATED"];
+export const PLATFORM_NOTIFICATION_TYPES = ["SUPPORT_MESSAGE", "DEMO_REQUEST_RECEIVED", "TRIAL_ENDING", "TRIAL_ENDED", "BILLING_SUSPENDED", "ORGANIZATION_CREATED", "BILLING_PAYMENT_RECEIVED"];
 
 export function trialEndFrom(start: Date, days = TRIAL_DAYS) {
   return new Date(start.getTime() + days * DAY_MS);

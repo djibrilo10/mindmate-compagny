@@ -1001,6 +1001,12 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - Confirmation : envoyée par `/api/demo-request` à la personne qui demande une démo, avec le bouton « Voir la démo » (`/#demo`).
 - Le courriel part de `no-reply@` : le texte renvoie vers Paramètres → « Contacter Djibril » plutôt que « répondez à ce courriel ».
 
+### 7.47 Copie des factures payées au propriétaire (10 oct. 2026)
+
+- Demande de l'utilisateur : recevoir la facture par courriel quand un client paie. Adresse : `BILLING_NOTIFY_EMAIL` (variable Vercel), par défaut `mindmatecompagny@gmail.com`.
+- Webhook `invoice.paid` → `markInvoicePaid(customer, invoice)` → `sendInvoiceToOwner` (`lib/billing.ts`) pour toute facture d'un montant > 0 (les factures à 0 $ de début d'essai sont ignorées) : courriel (montant, n° de facture, employés facturés, liens « Voir la facture » et « Télécharger le PDF » de Stripe) + notification `BILLING_PAYMENT_RECEIVED`. Le premier paiement d'une entreprise est titré « Premier paiement reçu ».
+- Une ligne d'historique par facture (`BILLING_FIRST_PAYMENT` / `BILLING_PAYMENT`, `targetId` = id de la facture Stripe) : sert à repérer le premier paiement et à ne jamais envoyer deux fois la même facture si Stripe renvoie l'événement.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1222,6 +1228,7 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - **Essai gratuit de 30 jours + rappels** (7.44) et plan de présentation `demo/plan-presentation-20-minutes.md`. **Migration à appliquer** : `npx prisma migrate deploy` puis `npx prisma generate` (`20261013120000_organization_trial`). Nouveaux : `lib/trial.ts`, `app/api/cron/trial-reminders/route.ts`, `components/dashboard/TrialBanner.tsx`. Modifiés : `prisma/schema.prisma`, `vercel.json`, `app/api/auth/register/route.ts`, `app/api/platform/organizations/[id]/route.ts`, `app/platform/{layout,page}.tsx`, `app/platform/{organizations,notifications}/page.tsx`, `components/platform/OrganizationsTable.tsx`, `app/dashboard/layout.tsx`, `components/dashboard/DashboardShell.tsx`, `lib/i18n/messages/{fr,en}.ts`.
 - **Facturation Stripe par employé actif + suspension automatique après 7 jours de grâce** (7.45). **Migration à appliquer** : `npx prisma migrate deploy` puis `npx prisma generate` (`20261014120000_stripe_billing`). Variables Vercel : `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`. Nouveaux : `lib/stripe.ts`, `lib/billing.ts`, `app/api/billing/{checkout,portal}/route.ts`, `app/api/stripe/webhook/route.ts`, `components/dashboard/{BillingButton,BillingCard}.tsx`. Modifiés : `prisma/schema.prisma`, `lib/{auth,session-guard,trial}.ts`, `middleware.ts`, `app/api/platform/organizations/[id]/route.ts`, `app/api/cron/trial-reminders/route.ts`, `app/platform/layout.tsx`, `app/platform/organizations/page.tsx`, `components/platform/OrganizationsTable.tsx`, `app/dashboard/layout.tsx`, `app/dashboard/settings/page.tsx`, `app/(auth)/suspended/page.tsx`, `components/dashboard/{DashboardShell,TrialBanner}.tsx`, `lib/i18n/messages/{fr,en}.ts`.
 - **Courriels de bienvenue et de confirmation de demande de démo** (7.46). Aucune migration. Nouveau : `lib/onboarding-emails.ts`. Modifiés : `app/api/auth/register/route.ts`, `app/api/demo-request/route.ts`, `lib/i18n/messages/{fr,en}.ts`.
+- **Copie des factures payées au propriétaire** (7.47). Aucune migration. Variable facultative `BILLING_NOTIFY_EMAIL`. Modifiés : `lib/billing.ts`, `app/api/stripe/webhook/route.ts`, `lib/trial.ts`, `lib/activity-log.ts`.
 
 ## 14. Refonte esthétique (en cours)
 

@@ -1,5 +1,5 @@
 import { stripeRequest, verifyStripeSignature, type StripeSubscription } from "@/lib/stripe";
-import { applySubscription, markInvoicePaid, markPaymentFailed } from "@/lib/billing";
+import { applySubscription, markInvoicePaid, markPaymentFailed, type PaidInvoice } from "@/lib/billing";
 
 // ------------------------------------------------------------
 // POST /api/stripe/webhook (PUBLIC, AUDIT.md 7.45) — appelé par Stripe.
@@ -52,7 +52,8 @@ export async function POST(request: Request) {
       }
       case "invoice.paid": {
         const customer = customerOf(obj);
-        if (customer) await markInvoicePaid(customer);
+        // + copie de la facture au propriétaire si le montant est > 0 (AUDIT.md 7.47).
+        if (customer) await markInvoicePaid(customer, obj as unknown as PaidInvoice);
         break;
       }
       case "invoice.payment_failed": {

@@ -92,11 +92,90 @@ export async function markPaymentFailed(customerId: string) {
 }
 
 /** Facture payée : fin de la période de grâce, réactivation si besoin. */
-export async function markInvoicePaid(customerId: string) {
+export async function markInvoicePaid(customerId: string, invoice?: PaidInvoice) {
   const org = await findOrgForStripe(customerId);
   if (!org) return;
   await prisma.organization.update({ where: { id: org.id }, data: { billingGraceUntil: null } });
   await reactivateIfBillingSuspended(org.id);
+  if (invoice && invoice.amount_paid > 0) await sendInvoiceToOwner(org.id, invoice);
+}
+
+// Champs utiles d'une facture Stripe (événement invoice.paid).
+export type PaidInvoice = {
+  id: string;
+  number?: string | null;
+  amount_paid: number; // en cents
+  currency: string;
+  hosted_invoice_url?: string | null;
+  invoice_pdf?: string | null;
+};
+
+/** Adresse qui reçoit une copie de chaque facture payée (AUDIT.md 7.47). */
+export const BILLING_NOTIFY_EMAIL = () => process.env.BILLING_NOTIFY_EMAIL?.trim() || "mindmatecompagny@gmail.com";
+
+/**
+ * Paiement réel reçu (montant > 0) : courriel au propriétaire avec le
+ * montant et les liens vers la facture Stripe (page + PDF), et notification
+ * dans son espace. Le PREMIER paiement d'une entreprise est signalé comme tel
+ * (repéré par une ligne BILLING_FIRST_PAYMENT dans son historique).
+ * Chaque facture n'est envoyée qu'une fois, même si Stripe renvoie l'événement.
+ */
+async function sendInvoiceToOwner(organizationId: string, invoice: PaidInvoice) {
+  try {
+    const already = await prisma.auditLog.findFirst({
+      where: { organizationId, action: { in: ["BILLING_FIRST_PAYMENT", "BILLING_PAYMENT"] }, targetId: invoice.id },
+      select: { id: true },
+    });
+    if (already) return;
+    const first = !(await prisma.auditLog.findFirst({ where: { organizationId, action: "BILLING_FIRST_PAYMENT" }, select: { id: true } }));
+    await prisma.auditLog.create({
+      data: {
+        organizationId,
+        action: first ? "BILLING_FIRST_PAYMENT" : "BILLING_PAYMENT",
+        targetId: invoice.id,
+        metadata: { amount: invoice.amount_paid, currency: invoice.currency, number: invoice.number ?? null },
+      },
+    });
+
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, slug: true, billingQuantity: true } });
+    const amount = new Intl.NumberFormat("fr-CA", { style: "currency", currency: invoice.currency.toUpperCase() }).format(invoice.amount_paid / 100);
+    const name = org?.name ?? "Entreprise";
+    const title = first ? `Premier paiement reçu : ${name} (${amount})` : `Paiement reçu : ${name} (${amount})`;
+    const lines = [
+      first ? `${name} vient d'effectuer son premier paiement !` : `${name} a payé sa facture.`,
+      `Montant : ${amount}`,
+      invoice.number ? `Facture : ${invoice.number}` : null,
+      org?.billingQuantity ? `Employés facturés : ${org.billingQuantity}` : null,
+      org?.slug ? `Identifiant : ${org.slug}` : null,
+    ].filter((l): l is string => Boolean(l));
+    const links = [
+      invoice.hosted_invoice_url ? { label: "Voir la facture", url: invoice.hosted_invoice_url } : null,
+      invoice.invoice_pdf ? { label: "Télécharger le PDF", url: invoice.invoice_pdf } : null,
+    ].filter((l): l is { label: string; url: string } => Boolean(l));
+
+    await sendEmail({
+      to: BILLING_NOTIFY_EMAIL(),
+      subject: title,
+      text: [...lines, "", ...links.map((l) => `${l.label} : ${l.url}`)].join("\n"),
+      html: `<p>${lines.map((l) => escapeHtml(l)).join("<br>")}</p>${links
+        .map((l) => `<p><a href="${escapeHtml(l.url)}">${escapeHtml(l.label)}</a></p>`)
+        .join("")}`,
+    });
+
+    const owners = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", status: "ACTIVE" }, select: { id: true, organizationId: true } });
+    await Promise.all(
+      owners.map((o) =>
+        notifyUser(o.organizationId, o.id, {
+          type: "BILLING_PAYMENT_RECEIVED",
+          title,
+          body: lines.slice(1).join(" · "),
+          link: invoice.hosted_invoice_url ?? "/platform/organizations",
+        }).catch((e) => console.error("[billing] notification de paiement", e))
+      )
+    );
+  } catch (error) {
+    console.error("[billing] facture non transmise au propriétaire", error);
+  }
 }
 
 async function emailOrgAdmins(organizationId: string, subject: string, text: string) {

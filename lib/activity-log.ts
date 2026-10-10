@@ -81,6 +81,8 @@ export type AuditAction =
   | "SCHEDULE_SWAP_CANCELLED"
   | "SCHEDULE_SWAP_APPROVED"
   | "SCHEDULE_SWAP_REJECTED"
+  | "BILLING_FIRST_PAYMENT"
+  | "BILLING_PAYMENT"
   | "ORGANIZATION_SUSPENDED"
   | "ORGANIZATION_REACTIVATED";
 
@@ -191,6 +193,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   SCHEDULE_SWAP_CANCELLED: "a annulé une demande d'échange de quart",
   SCHEDULE_SWAP_APPROVED: "a approuvé un échange de quart",
   SCHEDULE_SWAP_REJECTED: "a refusé un échange de quart",
+  BILLING_FIRST_PAYMENT: "premier paiement de l'abonnement reçu",
+  BILLING_PAYMENT: "paiement de l'abonnement reçu",
   ORGANIZATION_SUSPENDED: "a suspendu l'accès de l'organisation",
   ORGANIZATION_REACTIVATED: "a réactivé l'accès de l'organisation",
 };
@@ -249,6 +253,12 @@ export function actionDetail(action: string, metadata: unknown): string | null {
       const week = typeof data?.week === "string" ? data.week : null;
       const parts = [fileName, week ? `semaine du ${week}` : null].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : null;
+    }
+    case "BILLING_FIRST_PAYMENT":
+    case "BILLING_PAYMENT": {
+      const amount = typeof data?.amount === "number" ? data.amount : null;
+      const currency = typeof data?.currency === "string" ? data.currency.toUpperCase() : "CAD";
+      return amount !== null ? new Intl.NumberFormat("fr-CA", { style: "currency", currency }).format(amount / 100) : null;
     }
     case "SCHEDULE_SWAP_OFFERED":
     case "SCHEDULE_SWAP_ACCEPTED":
