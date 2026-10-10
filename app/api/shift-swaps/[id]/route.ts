@@ -160,6 +160,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!(await canScheduleUser(ctx, swap.fromUserId)) || !(await canScheduleUser(ctx, swap.takenById))) {
       return error("schedule.swap.errors.forbidden", 403);
     }
+    // Un responsable ne décide jamais d'un échange qui le concerne lui-même
+    // (AUDIT.md 7.49) — c'est alors à l'admin de le faire.
+    if (ctx.role !== "ORG_ADMIN" && (ctx.userId === swap.fromUserId || ctx.userId === swap.takenById)) {
+      return error("schedule.swap.errors.forbidden", 403);
+    }
     const takerName = `${swap.takenBy.firstName} ${swap.takenBy.lastName}`;
 
     if (action === "reject") {

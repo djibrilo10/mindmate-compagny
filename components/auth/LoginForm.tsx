@@ -59,7 +59,8 @@ export function LoginForm() {
       });
 
       if (!result || result.error) {
-        setErrors({ form: t("auth.login.badCredentials") });
+        // Anti-force brute (AUDIT.md 7.49) : message distinct quand la limite est atteinte.
+        setErrors({ form: result?.error === "RATE_LIMITED" ? t("auth.login.tooManyAttempts") : t("auth.login.badCredentials") });
         return;
       }
 

@@ -24,8 +24,12 @@ const DEFAULT_FROM = "Mindmate Compagny <no-reply@mindmatecompagny.com>";
 export async function sendEmail(message: EmailMessage): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
+    // Le contenu (qui peut contenir un lien de réinitialisation) n'est
+    // affiché qu'en développement, jamais dans les journaux de production (AUDIT.md 7.49).
     console.info(
-      `[email] RESEND_API_KEY absente : courriel NON envoyé.\nÀ : ${message.to}\nObjet : ${message.subject}\n\n${message.text}`
+      process.env.NODE_ENV === "production"
+        ? `[email] RESEND_API_KEY absente : courriel NON envoyé (objet : ${message.subject}).`
+        : `[email] RESEND_API_KEY absente : courriel NON envoyé.\nÀ : ${message.to}\nObjet : ${message.subject}\n\n${message.text}`
     );
     return false;
   }

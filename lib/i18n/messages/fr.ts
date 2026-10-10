@@ -99,6 +99,7 @@ export const fr = {
       subtitle: "Connectez-vous à l'espace de votre organisation.",
       registered: "Organisation créée. Votre identifiant d'entreprise est {slug} — gardez-le, il vous servira à chaque connexion.",
       badCredentials: "Courriel ou mot de passe incorrect.",
+      tooManyAttempts: "Trop de tentatives de connexion. Réessayez dans 15 minutes.",
       submit: "Se connecter",
       submitting: "Connexion…",
       noAccount: "Pas encore de compte entreprise ?",
@@ -338,6 +339,7 @@ export const fr = {
     exit: "Quitter la démo",
   },
   errors: {
+    tooManyRequests: "Trop de tentatives. Réessayez un peu plus tard.",
     demoReadOnly: "C'est une démo : les modifications sont désactivées.",
     invalidRequest: "Requête invalide.",
     invalidData: "Données invalides.",

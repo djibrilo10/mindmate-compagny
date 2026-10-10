@@ -3,6 +3,7 @@ import { demoRequestSchema } from "@/lib/validations/demo-request";
 import { getLocale } from "@/lib/i18n/server";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { notifyUser } from "@/lib/notifications";
+import { HOUR, clientIp, consume, tooManyRequests } from "@/lib/rate-limit";
 import { buildDemoRequestConfirmation, sendQuietly } from "@/lib/onboarding-emails";
 import { appBaseUrl } from "@/lib/password-reset";
 
@@ -17,6 +18,8 @@ import { appBaseUrl } from "@/lib/password-reset";
 // ------------------------------------------------------------
 
 export async function POST(request: Request) {
+  // Anti-spam (AUDIT.md 7.49) : 5 demandes par heure et par adresse IP.
+  if (!(await consume(`demo:ip:${clientIp(request.headers)}`, 5, HOUR))) return tooManyRequests();
   const body = await request.json().catch(() => null);
   const parsed = demoRequestSchema.safeParse(body);
   if (!parsed.success) {

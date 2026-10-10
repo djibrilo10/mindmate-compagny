@@ -7,6 +7,23 @@ import { requireAuth, handleAuthError } from "@/lib/session-guard";
 // lib/push.ts (envoi côté serveur).
 // ============================================================
 
+const PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/, // Chrome, Edge (Android), Brave…
+  /^updates\.push\.services\.mozilla\.com$/, // Firefox
+  /(^|\.)push\.services\.mozilla\.com$/,
+  /(^|\.)push\.apple\.com$/, // Safari, iPhone (PWA)
+  /(^|\.)notify\.windows\.com$/, // Edge (Windows)
+];
+
+function isPushServiceEndpoint(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.port && PUSH_HOSTS.some((re) => re.test(url.hostname));
+  } catch {
+    return false;
+  }
+}
+
 // POST /api/push/subscribe -> enregistre (ou met à jour) l'abonnement
 export async function POST(request: Request) {
   try {
@@ -18,6 +35,11 @@ export async function POST(request: Request) {
     const auth = body?.keys?.auth as string | undefined;
 
     if (!endpoint || !p256dh || !auth) {
+      return Response.json({ error: "Abonnement invalide" }, { status: 400 });
+    }
+    // Anti-SSRF (AUDIT.md 7.49) : le serveur enverra des requêtes à cette
+    // adresse ; on n'accepte que les services de notifications des navigateurs.
+    if (!isPushServiceEndpoint(endpoint)) {
       return Response.json({ error: "Abonnement invalide" }, { status: 400 });
     }
 

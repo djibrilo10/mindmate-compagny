@@ -29,6 +29,9 @@ export function hashResetToken(rawToken: string): string {
 export function appBaseUrl(request: Request): string {
   const configured = process.env.APP_URL?.trim().replace(/\/+$/, "");
   if (configured) return configured;
+  // En production, jamais l'en-tête Host de la requête (il pourrait être
+  // falsifié pour détourner les liens envoyés par courriel, AUDIT.md 7.49).
+  if (process.env.NODE_ENV === "production") return "https://www.mindmatecompagny.com";
   return new URL(request.url).origin;
 }
 

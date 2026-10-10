@@ -98,6 +98,7 @@ export const en: Messages = {
       subtitle: "Sign in to your organization's space.",
       registered: "Organization created. Your company ID is {slug} — keep it, you'll need it every time you sign in.",
       badCredentials: "Incorrect email or password.",
+      tooManyAttempts: "Too many sign-in attempts. Try again in 15 minutes.",
       submit: "Sign in",
       submitting: "Signing in…",
       noAccount: "No company account yet?",
@@ -335,6 +336,7 @@ export const en: Messages = {
     exit: "Exit the demo",
   },
   errors: {
+    tooManyRequests: "Too many attempts. Please try again a bit later.",
     demoReadOnly: "This is a demo: changes are disabled.",
     invalidRequest: "Invalid request.",
     invalidData: "Invalid data.",

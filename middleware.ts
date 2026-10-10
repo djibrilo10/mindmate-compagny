@@ -27,12 +27,20 @@ const SESSION_COOKIE_NAMES = ["__Secure-next-auth.session-token", "next-auth.ses
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
+  // Sans secret, impossible de vérifier les sessions : on refuse tout plutôt
+  // que d'accepter des jetons signés avec une clé vide (AUDIT.md 7.49).
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    console.error("[middleware] NEXTAUTH_SECRET manquant");
+    return NextResponse.json({ error: "Configuration du serveur incomplète" }, { status: 500 });
+  }
+
   const raw = SESSION_COOKIE_NAMES.map((name) => req.cookies.get(name)?.value).find(Boolean);
 
   let token: Record<string, any> | null = null;
   if (raw) {
     try {
-      token = (await decode({ token: raw, secret: process.env.NEXTAUTH_SECRET ?? "" })) as Record<
+      token = (await decode({ token: raw, secret })) as Record<
         string,
         any
       > | null;

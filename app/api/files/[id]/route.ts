@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import type { Role } from "@prisma/client";
+import { safeFileHeaders } from "@/lib/attachments";
 
 const ADMIN_ROLES: Role[] = ["ORG_ADMIN", "SUPER_ADMIN"];
 
@@ -21,18 +22,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return Response.json({ error: "Fichier introuvable" }, { status: 404 });
     }
 
-    const encodedName = encodeURIComponent(file.fileName);
-
-    return new Response(new Uint8Array(file.data), {
-      headers: {
-        "Content-Type": file.mimeType,
-        "Content-Length": String(file.fileSize),
-        // "inline" pour que le navigateur affiche le PDF/l'image directement
-        // au lieu de forcer un téléchargement.
-        "Content-Disposition": `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    // Type réel vérifié d'après le contenu, nosniff + sandbox (AUDIT.md 7.49).
+    const bytes = new Uint8Array(file.data);
+    return new Response(bytes, { headers: safeFileHeaders(bytes, file.fileName) });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;

@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/phone";
+import { HOUR, clientIp, consume, tooManyRequests } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
@@ -21,6 +22,8 @@ import { LOCALE_COOKIE, isLocale } from "@/lib/i18n/config";
 
 export async function POST(request: Request) {
   const { t } = await getI18n();
+  // Anti-abus (AUDIT.md 7.49) : 20 inscriptions par heure et par adresse IP.
+  if (!(await consume(`join:ip:${clientIp(request.headers)}`, 20, HOUR))) return tooManyRequests();
   const body = await request.json().catch(() => null);
 
   if (!body) {

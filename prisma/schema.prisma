@@ -228,6 +228,7 @@ model User {
   hireDate       DateTime?    @default(now()) // utile pour "nouvelles recrues"
   locale         String?      // "fr" | "en" choisi par la personne (null = langue par défaut de l'entreprise, AUDIT.md 7.29)
   departmentConfirmedAt DateTime? // département choisi par la personne (inscription ou fenêtre unique à la connexion, AUDIT.md 7.34)
+  passwordChangedAt DateTime? // dernier changement de mot de passe : les sessions ouvertes AVANT sont refusées (AUDIT.md 7.49)
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -966,4 +967,20 @@ model DemoRequest {
   @@index([createdAt])
   @@index([email])
   @@map("demo_requests")
+}
+
+// ------------------------------------------------------------
+// RATE LIMIT HIT — compteur anti-abus (AUDIT.md 7.49) : une ligne par
+// tentative, par clé (ex. "login:acct:<slug>:<identifiant>", "register:ip:<ip>").
+// Compté sur une fenêtre glissante ; les lignes de plus d'un jour sont
+// purgées au fil de l'eau (lib/rate-limit.ts).
+// ------------------------------------------------------------
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
+  @@map("rate_limit_hits")
 }

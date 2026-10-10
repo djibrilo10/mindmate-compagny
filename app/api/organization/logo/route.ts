@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
-import { MAX_LOGO_SIZE, formatFileSize, isAllowedLogoType } from "@/lib/attachments";
+import { MAX_LOGO_SIZE, formatFileSize, isAllowedLogoType, safeFileHeaders } from "@/lib/attachments";
 import type { Role } from "@prisma/client";
 
 const ADMIN_ROLES: Role[] = ["ORG_ADMIN", "SUPER_ADMIN"];
@@ -32,13 +32,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/logo-mark-white.png", request.url));
     }
 
-    return new Response(new Uint8Array(organization.logoData), {
-      headers: {
-        "Content-Type": organization.logoMimeType,
-        "Content-Length": String(organization.logoData.length),
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    // Type réel vérifié d'après le contenu, nosniff + sandbox (AUDIT.md 7.49).
+    const bytes = new Uint8Array(organization.logoData);
+    return new Response(bytes, { headers: safeFileHeaders(bytes, null) });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;

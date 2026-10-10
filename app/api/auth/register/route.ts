@@ -5,6 +5,7 @@ import { registerSchema } from "@/lib/validations/auth";
 import { slugify } from "@/lib/slug";
 import { getI18n } from "@/lib/i18n/server";
 import { notifyNewOrganization, trialEndFrom } from "@/lib/trial";
+import { HOUR, clientIp, consume, tooManyRequests } from "@/lib/rate-limit";
 import { buildWelcomeEmail, sendQuietly } from "@/lib/onboarding-emails";
 import { appBaseUrl } from "@/lib/password-reset";
 
@@ -13,6 +14,8 @@ export async function POST(request: Request) {
   // messages d'erreur ET devient la langue par défaut de la nouvelle
   // entreprise (modifiable ensuite dans Paramètres, AUDIT.md 7.29).
   const { t, locale } = await getI18n();
+  // Anti-robots (AUDIT.md 7.49) : 5 entreprises créées par heure et par adresse IP.
+  if (!(await consume(`register:ip:${clientIp(request.headers)}`, 5, HOUR))) return tooManyRequests();
   const body = await request.json().catch(() => null);
 
   if (!body) {

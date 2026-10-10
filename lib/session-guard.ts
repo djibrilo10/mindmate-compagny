@@ -54,11 +54,17 @@ export async function requireAuth(options: { allowBillingSuspended?: boolean } =
       status: true,
       organizationId: true,
       departmentId: true,
+      passwordChangedAt: true,
       organization: { select: { status: true, suspendedReason: true } },
     },
   });
   if (!dbUser || dbUser.status !== "ACTIVE" || dbUser.organizationId !== sessionUser.organizationId) {
     throw new UnauthorizedError("Compte désactivé ou introuvable");
+  }
+  // Mot de passe changé APRÈS l'ouverture de cette session (AUDIT.md 7.49) :
+  // une session volée ne survit pas à une réinitialisation.
+  if (dbUser.passwordChangedAt && dbUser.passwordChangedAt.getTime() > Number(sessionUser.pwdAt ?? 0) + 1000) {
+    throw new UnauthorizedError("Session expirée");
   }
 
   // Le SUPER_ADMIN (vous) gère TOUTES les organisations clientes depuis

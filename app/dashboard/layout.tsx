@@ -59,6 +59,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
             status: true,
             organizationId: true,
             departmentConfirmedAt: true,
+            passwordChangedAt: true,
             department: { select: { name: true, color: true } },
           },
         })
@@ -69,6 +70,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // principal, voir AUDIT.md 7.22) : accès coupé tout de suite, comme dans
   // lib/session-guard.ts.
   if (!dbUser || dbUser.status !== "ACTIVE") {
+    redirect("/login");
+  }
+  // Session ouverte avant un changement de mot de passe (AUDIT.md 7.49).
+  if (dbUser.passwordChangedAt && dbUser.passwordChangedAt.getTime() > Number((session.user as { pwdAt?: number }).pwdAt ?? 0) + 1000) {
     redirect("/login");
   }
 

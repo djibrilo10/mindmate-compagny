@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { safeFileHeaders } from "@/lib/attachments";
 import { requireAuth, requireRole, handleAuthError } from "@/lib/session-guard";
 import type { Role } from "@prisma/client";
 
@@ -25,18 +26,9 @@ export async function GET(
       return Response.json({ error: "Fichier introuvable" }, { status: 404 });
     }
 
-    const encodedName = encodeURIComponent(attachment.fileName);
-
-    return new Response(new Uint8Array(attachment.data), {
-      headers: {
-        "Content-Type": attachment.fileType,
-        "Content-Length": String(attachment.fileSize),
-        // "inline" pour que le navigateur affiche le PDF/l'image directement
-        // au lieu de forcer un téléchargement.
-        "Content-Disposition": `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    // Type réel vérifié d'après le contenu, nosniff + sandbox (AUDIT.md 7.49).
+    const bytes = new Uint8Array(attachment.data);
+    return new Response(bytes, { headers: safeFileHeaders(bytes, attachment.fileName) });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;

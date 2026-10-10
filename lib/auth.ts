@@ -1,7 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
-import { verifyPassword } from "./password";
+import { hashPassword, verifyPassword } from "./password";
+import { MINUTE, clearHits, clientIp, consume, countHits, recordHit } from "./rate-limit";
 import { normalizeLoginIdentifier } from "./validations/auth";
 import { DEMO_ACCOUNTS, DEMO_ORG_SLUG, isDemoRole } from "./demo";
 import { refreshDemoIfStale } from "./demo-seed";
@@ -13,6 +14,23 @@ import { refreshDemoIfStale } from "./demo-seed";
 // de base à TOUTES les vérifications d'accès. On ne fait JAMAIS
 // confiance à un organizationId envoyé depuis le frontend.
 // ------------------------------------------------------------
+
+// ------------------------------------------------------------
+// Anti-force brute (AUDIT.md 7.49) :
+// - 30 tentatives / 15 min par adresse IP ;
+// - 5 échecs / 15 min par compte (entreprise + identifiant), remis à zéro
+//   à la connexion réussie ;
+// - temps de réponse identique que le compte existe ou non (bcrypt est
+//   toujours exécuté, sur un faux hash si besoin) : impossible de deviner
+//   quels comptes existent en chronométrant.
+// Le message "RATE_LIMITED" est lu par LoginForm (« Trop de tentatives »).
+// ------------------------------------------------------------
+const LOGIN_WINDOW = 15 * MINUTE;
+let dummyHash: Promise<string> | null = null;
+async function burnPasswordCheck(password: string) {
+  dummyHash ??= hashPassword(`dummy-${Math.random()}`);
+  await verifyPassword(password, await dummyHash);
+}
 
 export const authOptions: NextAuthOptions = {
   // Explicite plutôt que de compter sur le repli automatique de next-auth
@@ -46,10 +64,19 @@ export const authOptions: NextAuthOptions = {
         // du type acme.monapp.com ou un champ "code entreprise"
         organizationSlug: { label: "Entreprise", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password || !credentials?.organizationSlug) {
           throw new Error("Champs manquants");
         }
+
+        const ip = clientIp(req?.headers as Record<string, string | string[] | undefined> | undefined);
+        if (!(await consume(`login:ip:${ip}`, 30, LOGIN_WINDOW))) throw new Error("RATE_LIMITED");
+        const accountKey = `login:acct:${credentials.organizationSlug.toLowerCase().trim()}:${credentials.email.toLowerCase().trim()}`;
+        if ((await countHits(accountKey, LOGIN_WINDOW)) >= 5) throw new Error("RATE_LIMITED");
+        const fail = async (): Promise<never> => {
+          await recordHit(accountKey);
+          throw new Error("Identifiants invalides");
+        };
 
         // Les slugs sont stockés en minuscules (voir génération à l'inscription).
         // On normalise ici pour que la connexion ne soit pas sensible à la casse
@@ -62,13 +89,17 @@ export const authOptions: NextAuthOptions = {
         if (!organization) {
           // Message volontairement générique : ne jamais révéler
           // si c'est l'entreprise, l'email ou le mdp qui est faux.
-          throw new Error("Identifiants invalides");
+          await burnPasswordCheck(credentials.password);
+          return fail();
         }
 
         // Courriel OU numéro de téléphone (AUDIT.md 7.40), nettoyé comme dans
         // le formulaire (AUDIT.md, 5 oct. 2026).
         const identifier = normalizeLoginIdentifier(credentials.email);
-        if (!identifier) throw new Error("Identifiants invalides");
+        if (!identifier) {
+          await burnPasswordCheck(credentials.password);
+          return fail();
+        }
         const user = await prisma.user.findUnique({
           where: identifier.includes("@")
             ? { organizationId_email: { organizationId: organization.id, email: identifier } }
@@ -76,13 +107,15 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || user.status !== "ACTIVE") {
-          throw new Error("Identifiants invalides");
+          await burnPasswordCheck(credentials.password);
+          return fail();
         }
 
         const isValid = await verifyPassword(credentials.password, user.passwordHash);
         if (!isValid) {
-          throw new Error("Identifiants invalides");
+          return fail();
         }
+        await clearHits(accountKey);
 
         // Vérifié APRÈS le mot de passe (jamais avant) : on ne révèle le
         // statut de l'organisation qu'à quelqu'un qui a déjà prouvé ses
@@ -104,6 +137,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           organizationId: user.organizationId,
           departmentId: user.departmentId,
+          passwordChangedAt: user.passwordChangedAt?.getTime() ?? 0,
         };
       },
     }),
@@ -156,6 +190,9 @@ export const authOptions: NextAuthOptions = {
         token.organizationId = (user as any).organizationId;
         token.departmentId = (user as any).departmentId;
         token.isDemo = Boolean((user as any).isDemo);
+        // Date du mot de passe utilisé pour ouvrir la session (AUDIT.md 7.49) :
+        // après un changement de mot de passe, les sessions plus anciennes sont refusées.
+        token.pwdAt = Number((user as any).passwordChangedAt ?? 0);
       }
       return token;
     },
@@ -167,6 +204,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).organizationId = token.organizationId;
         (session.user as any).departmentId = token.departmentId;
         (session.user as any).isDemo = Boolean(token.isDemo);
+        (session.user as any).pwdAt = Number(token.pwdAt ?? 0);
       }
       return session;
     },

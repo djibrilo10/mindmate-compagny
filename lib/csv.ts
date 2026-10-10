@@ -7,6 +7,12 @@
 export type CsvColumn = { key: string; label: string };
 
 function escapeCsvField(value: string): string {
+  // Anti « injection de formule » (AUDIT.md 7.49) : une cellule qui commence
+  // par = + - @ (ou tabulation / retour) serait exécutée comme une formule par
+  // Excel. Une apostrophe devant la neutralise (elle n'est pas affichée).
+  if (/^[=+\-@\t\r]/.test(value)) {
+    value = `'${value}`;
+  }
   if (/[",\n\r]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }

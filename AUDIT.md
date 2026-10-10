@@ -1014,6 +1014,23 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
 - `/platform/organizations` : bouton « Supprimer définitivement » sur les organisations SUSPENDUES ; confirmation en retapant l'identifiant (`window.prompt`).
 - `DELETE /api/platform/organizations/[id] { confirmSlug }` (SUPER_ADMIN) : refuse la démo, l'entreprise interne du propriétaire (`isInternalOrganization`) et toute organisation non suspendue ; annule d'abord l'abonnement Stripe s'il est actif (erreur ignorée, ex. abonnement du mode test) ; puis `prisma.organization.delete` (tout le contenu part en cascade). Irréversible ; seule trace : le journal du serveur (Vercel).
 
+### 7.49 Revue de sécurité et correctifs (10 oct. 2026)
+
+- Demande de l'utilisateur : analyser les failles (OWASP ZAP sur une copie locale, analyse du code) et les corriger. L'analyse du code a été faite par revue complète des routes `app/api/**` (contrôle d'accès, IDOR multi-entreprises) et recherche de motifs dangereux (XSS, injections, en-têtes, fichiers, secrets). Aucune faille critique ou élevée trouvée : toutes les routes protégées appellent `requireAuth`, toutes les requêtes par id sont filtrées par `organizationId`, aucune donnée de la requête n'est copiée telle quelle dans Prisma.
+- Correctifs :
+  - **Force brute à la connexion** (`lib/auth.ts`) : 30 tentatives / 15 min par IP, 5 échecs / 15 min par compte (remis à zéro après succès), message « Trop de tentatives » (`auth.login.tooManyAttempts`). bcrypt exécuté même si le compte n'existe pas (faux hash) : plus de fuite par le temps de réponse.
+  - **Limiteur anti-abus en base** (`lib/rate-limit.ts`, table `rate_limit_hits`, IP via `x-forwarded-for`) : inscription d'entreprise 5/h/IP, inscription employé 20/h/IP, vérification de code d'invitation 30/h/IP, mot de passe oublié 10/h/IP, réinitialisation 20/h/IP, demande de démo 5/h/IP → 429 `errors.tooManyRequests`.
+  - **Mot de passe oublié** : réponse immédiate, recherche du compte et courriel faits après (`after()` de Next) → temps de réponse identique que le compte existe ou non.
+  - **Sessions fermées après une réinitialisation** : `User.passwordChangedAt` ; la date est mise dans le jeton (`pwdAt`) ; `requireAuth` et le layout du tableau de bord refusent une session plus ancienne que le dernier changement.
+  - **En-têtes HTTP** (`next.config.ts`) : CSP (pages), X-Frame-Options DENY + frame-ancestors 'none', nosniff, Referrer-Policy, Permissions-Policy, HSTS, COOP, `poweredByHeader: false`.
+  - **Fichiers servis** (`safeFileHeaders`, `lib/attachments.ts`) : type réel reconnu d'après les premiers octets (PDF/PNG/JPEG/WEBP, sinon téléchargement `application/octet-stream`), nosniff, CSP sandbox pour les images (pas pour les PDF, que Chrome n'afficherait plus). Documents, pièces jointes d'annonces, logo.
+  - **Injection de formules CSV** (`lib/csv.ts`) : apostrophe devant toute cellule commençant par = + - @ tabulation ou retour.
+  - **SSRF via notifications push** : `/api/push/subscribe` n'accepte que les services push des navigateurs (FCM, Mozilla, Apple, Windows), en https.
+  - **Échanges de quart** : un responsable ne peut pas approuver/refuser un échange qui le concerne (seul l'admin le peut).
+  - **Middleware** : refuse tout si `NEXTAUTH_SECRET` manque (plus de vérification avec une clé vide). **Courriels** : le contenu n'est plus écrit dans les journaux de production quand Resend manque. **Liens envoyés par courriel** : en production, jamais construits depuis l'en-tête Host (repli sur https://www.mindmatecompagny.com si `APP_URL` manque).
+- Choix conservés (signalés, non modifiés) : un co-admin peut annuler un départ ; le formulaire « Rejoindre » dit si un courriel est déjà utilisé dans l'entreprise (utile aux employés, limité par le débit) ; pas encore de CAPTCHA (à ajouter si des robots apparaissent malgré les limites).
+- Migration `20261015120000_security_hardening` (colonne `users.passwordChangedAt`, table `rate_limit_hits`).
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
@@ -1240,6 +1257,7 @@ Ce fichier vit **avec le code**, dans le dossier du projet (`AUDIT.md` à la rac
 - **Lien « Retour à l'accueil »** en haut à gauche de toutes les pages de connexion / inscription (`app/(auth)/layout.tsx`, texte `auth.backHome` FR/EN), pour revenir à la page d'accueil et à la démo (7.43). Aucune migration.
 - **Entreprise interne jamais facturée** (7.45) : l'organisation qui contient le compte SUPER_ADMIN (« Mindmate Compagny ») n'affiche plus la carte « Abonnement » et `/api/billing/checkout` la refuse (`isInternalOrganization`, `lib/billing.ts`). Aucune migration.
 - **Suppression définitive d'une organisation suspendue** depuis l'espace propriétaire (7.48). Aucune migration. Modifiés : `app/api/platform/organizations/[id]/route.ts`, `app/platform/organizations/page.tsx`, `components/platform/OrganizationsTable.tsx`.
+- **Revue de sécurité + correctifs** (7.49). **Migration à appliquer** : `npx prisma migrate deploy` puis `npx prisma generate` (`20261015120000_security_hardening`). Nouveau : `lib/rate-limit.ts`. Modifiés : `next.config.ts`, `middleware.ts`, `prisma/schema.prisma`, `lib/{auth,session-guard,attachments,csv,email,password-reset}.ts`, `app/dashboard/layout.tsx`, `components/auth/LoginForm.tsx`, `app/api/auth/{register,join,join/departments,forgot-password,reset-password}/route.ts`, `app/api/demo-request/route.ts`, `app/api/files/[id]/route.ts`, `app/api/announcements/[id]/attachments/[attachmentId]/route.ts`, `app/api/organization/logo/route.ts`, `app/api/push/subscribe/route.ts`, `app/api/shift-swaps/[id]/route.ts`, `lib/i18n/messages/{fr,en}.ts`.
 
 ## 14. Refonte esthétique (en cours)
 

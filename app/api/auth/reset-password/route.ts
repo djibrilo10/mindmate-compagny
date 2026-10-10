@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/password";
 import { resetPasswordSchema } from "@/lib/validations/auth";
 import { getI18n } from "@/lib/i18n/server";
 import { findValidResetToken } from "@/lib/password-reset";
+import { HOUR, clientIp, consume, tooManyRequests } from "@/lib/rate-limit";
 
 // ------------------------------------------------------------
 // POST /api/auth/reset-password (public, AUDIT.md 7.35)
@@ -15,6 +16,7 @@ import { findValidResetToken } from "@/lib/password-reset";
 
 export async function POST(request: Request) {
   const { t } = await getI18n();
+  if (!(await consume(`reset:ip:${clientIp(request.headers)}`, 20, HOUR))) return tooManyRequests();
   const body = await request.json().catch(() => null);
   const parsed = resetPasswordSchema.safeParse(body);
   if (!parsed.success) {
@@ -43,7 +45,8 @@ export async function POST(request: Request) {
       });
       if (claim.count === 0) return false;
 
-      await tx.user.update({ where: { id: token.userId }, data: { passwordHash } });
+      // passwordChangedAt : ferme toutes les sessions ouvertes avant (AUDIT.md 7.49).
+      await tx.user.update({ where: { id: token.userId }, data: { passwordHash, passwordChangedAt: now } });
       await tx.passwordResetToken.updateMany({
         where: { userId: token.userId, usedAt: null },
         data: { usedAt: now },
