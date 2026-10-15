@@ -12,8 +12,10 @@ import {
   DoorOpen,
   Flag,
   Languages,
+  Mail,
   Megaphone,
   MessageSquare,
+  Phone,
   ShieldCheck,
   Smartphone,
   type LucideIcon,
@@ -224,6 +226,36 @@ export default async function HomePage() {
             <div>
               <h2 className="font-[family-name:var(--font-display)] text-3xl">{t("landing.form.title")}</h2>
               <p className="mt-3 text-[#5B6478]">{t("landing.form.subtitle")}</p>
+
+              {/* Contact direct (AUDIT.md 7.51) */}
+              <div className="mt-8 rounded-2xl border border-[#E2E4E9] bg-[#F7F8FA] p-5">
+                <h3 className="text-base font-semibold">{t("landing.contact.title")}</h3>
+                <p className="mt-1 text-sm text-[#5B6478]">{t("landing.contact.body")}</p>
+                <ul className="mt-4 space-y-3">
+                  <li>
+                    <a
+                      href="mailto:mindmatecompagny@gmail.com"
+                      className="flex items-center gap-3 break-all text-sm font-medium text-[#1C2438] hover:text-[#2F6F5E]"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E7F3EF] text-[#2F6F5E]">
+                        <Mail className="h-4 w-4" />
+                      </span>
+                      mindmatecompagny@gmail.com
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="tel:+12498796718"
+                      className="flex items-center gap-3 text-sm font-medium text-[#1C2438] hover:text-[#2F6F5E]"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E7F3EF] text-[#2F6F5E]">
+                        <Phone className="h-4 w-4" />
+                      </span>
+                      249-879-6718
+                    </a>
+                  </li>
+                </ul>
+              </div>
             </div>
             <div className="relative">
               <DemoRequestForm />

@@ -186,7 +186,7 @@ export const en: Messages = {
       openSpace: "Open my workspace",
     },
     hero: {
-      eyebrow: "For businesses with 10 to 200 employees",
+      eyebrow: "For businesses with 10 to 500 employees",
       title: "Your whole team, in one app.",
       subtitle: "Schedules, time off, announcements and messages: your employees have everything on their phone, and you stay in control without the paperwork.",
       seeDemo: "See the demo",
@@ -273,6 +273,10 @@ export const en: Messages = {
         tooLong: "This text is too long.",
         tooMany: "Too many requests sent. Try again later.",
       },
+    },
+    contact: {
+      title: "Contact me directly",
+      body: "Have a question? Email or call me, and I'll answer you personally.",
     },
     footer: {
       rights: "© {year} Mindmate Compagny",

@@ -189,7 +189,7 @@ export const fr = {
       openSpace: "Ouvrir mon espace",
     },
     hero: {
-      eyebrow: "Pour les PME de 10 à 200 employés",
+      eyebrow: "Pour les PME de 10 à 500 employés",
       title: "Toute votre équipe, dans une seule app.",
       subtitle: "Horaires, absences, annonces et messages : vos employés ont tout sur leur téléphone, et vous gardez le contrôle sans paperasse.",
       seeDemo: "Voir la démo",
@@ -276,6 +276,10 @@ export const fr = {
         tooLong: "Ce texte est trop long.",
         tooMany: "Trop de demandes envoyées. Réessayez plus tard.",
       },
+    },
+    contact: {
+      title: "Me contacter directement",
+      body: "Une question ? Écrivez-moi ou appelez-moi, je vous réponds personnellement.",
     },
     footer: {
       rights: "© {year} Mindmate Compagny",

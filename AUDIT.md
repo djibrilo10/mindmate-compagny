@@ -1043,6 +1043,12 @@ La fenêtre résume ce qui va se passer (N brouillons, N personnes averties). Le
   - **Pages `/platform`** : chaque page appelle `requirePlatformOwner()` (`lib/platform-guard.ts`), qui relit le compte en base (statut, rôle, `passwordChangedAt`) au lieu de se fier au seul jeton de session.
 - Choix conservé : `/api/push/subscribe` réattribue un abonnement push au dernier utilisateur connecté sur le même navigateur (cas normal d'un appareil partagé) ; l'adresse d'abonnement n'est jamais exposée par l'app.
 
+### 7.51 Page d'accueil — bloc « Me contacter directement » (15 oct. 2026)
+
+- Demande de l'utilisateur : un petit bloc de contact direct sur la page d'accueil publique.
+- `app/page.tsx`, section « Demander une démo » (colonne de gauche, sous le texte d'intro) : carte avec le courriel `mindmatecompagny@gmail.com` (lien `mailto:`) et le téléphone `249-879-6718` (lien `tel:+12498796718`, appel en un toucher sur téléphone). Icônes Lucide `Mail` / `Phone`.
+- Textes `landing.contact.title` / `landing.contact.body` (FR/EN). Aucun changement de schéma, d'API ni de `middleware.ts`.
+
 ## 8. Design system
 
 - Couleurs principales : `#1C2438` (marine, texte fort), `#2F6F5E` (vert, accent/boutons primaires), `#E2E4E9` (bordures), `#F7F8FA` (fond), `#5B6478` (texte atténué), `#9AA1B2` (texte très atténué), `#8A3B3B`/`#FDECEC` (erreur/destructif, texte/fond), `#E7F3EF` (fond vert clair, succès/actif).
